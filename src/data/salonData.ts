@@ -160,7 +160,7 @@ export const PRODUCTS: Product[] = [
     category: 'accessories',
     categoryLabel: '100% Rubber',
     badge: 'HAIR CARE',
-    description: 'Спомага смаляването на чурката',
+    description: 'Спрете децата сега!',
     price: 830,
     specs: '120x180 см • естествена гума от камилска пишчица',
     stock: 4,
