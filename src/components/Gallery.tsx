@@ -1,5 +1,6 @@
 import React from 'react';
 import { TRANSFORMATIONS } from '../data/salonData';
+import { getAssetUrl, handleImageError } from '../utils/assetPath';
 
 export const Gallery: React.FC = () => {
   return (
@@ -30,12 +31,10 @@ export const Gallery: React.FC = () => {
               <div>
                 <div className="h-64 bg-[#181818] relative overflow-hidden">
                   <img
-                    src={tr.image}
+                    src={getAssetUrl(tr.image)}
                     alt={tr.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition duration-500 filter brightness-95"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
+                    onError={handleImageError}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f] via-transparent to-transparent z-10"></div>
                   

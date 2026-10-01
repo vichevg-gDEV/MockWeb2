@@ -1,4 +1,5 @@
 import React from 'react';
+import { getAssetUrl } from '../utils/assetPath';
 
 export const About: React.FC = () => {
   return (
@@ -50,7 +51,7 @@ export const About: React.FC = () => {
                 <div className="relative w-48 h-48 sm:w-56 sm:h-56 mx-auto mb-6 flex items-center justify-center">
                   <div className="absolute inset-0 bg-[#D4AF37]/15 rounded-full blur-2xl pointer-events-none"></div>
                   <img
-                    src="/logo.png"
+                    src={getAssetUrl('logo.png')}
                     alt="VIP Beauty House Official Logo"
                     className="w-full h-full object-contain mix-blend-screen filter drop-shadow-[0_0_20px_rgba(212,175,55,0.4)] group-hover:scale-105 transition duration-500"
                   />

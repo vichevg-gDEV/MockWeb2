@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, CartItem } from '../types';
 import { PRODUCTS } from '../data/salonData';
+import { getAssetUrl, handleImageError } from '../utils/assetPath';
 
 interface ShopProps {
   products?: Product[];
@@ -142,16 +143,14 @@ export const Shop: React.FC<ShopProps> = ({
                     className="relative h-48 bg-[#181818] rounded-lg mb-4 text-center overflow-hidden cursor-pointer"
                   >
                     <img
-                      src={prod.image}
+                      src={getAssetUrl(prod.image)}
                       alt={prod.title}
                       className={`w-full h-full object-cover transition-transform duration-500 filter ${
                         isSoldOut
                           ? 'grayscale brightness-75 contrast-125 opacity-60'
                           : 'brightness-95 group-hover:scale-105'
                       }`}
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
+                      onError={handleImageError}
                     />
 
                     {/* Standard Badge */}
@@ -270,11 +269,12 @@ export const Shop: React.FC<ShopProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
               <div className="h-64 rounded-xl overflow-hidden bg-[#181818] border border-[#D4AF37]/20 relative">
                 <img
-                  src={selectedProduct.image}
+                  src={getAssetUrl(selectedProduct.image)}
                   alt={selectedProduct.title}
                   className={`w-full h-full object-cover ${
                     selectedProduct.stock <= 0 ? 'grayscale brightness-75 opacity-70' : ''
                   }`}
+                  onError={handleImageError}
                 />
                 {selectedProduct.stock <= 0 && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

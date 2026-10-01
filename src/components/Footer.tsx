@@ -1,4 +1,5 @@
 import React from 'react';
+import { getAssetUrl } from '../utils/assetPath';
 
 export const Footer: React.FC = () => {
   return (
@@ -12,7 +13,7 @@ export const Footer: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl border border-[#D4AF37]/30 flex items-center justify-center bg-black/40 overflow-hidden shrink-0 p-0.5 shadow-md">
                 <img
-                  src="/logo.png"
+                  src={getAssetUrl('logo.png')}
                   alt="VIP Beauty House Logo"
                   className="w-full h-full object-contain mix-blend-screen"
                 />

@@ -1,5 +1,6 @@
 import React from 'react';
 import { CartItem } from '../types';
+import { getAssetUrl, handleImageError } from '../utils/assetPath';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -100,9 +101,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     >
                       <div className="w-14 h-14 rounded bg-[#1c1c1c] overflow-hidden shrink-0 border border-[#D4AF37]/15">
                         <img
-                          src={item.product.image}
+                          src={getAssetUrl(item.product.image)}
                           alt={item.product.title}
                           className="w-full h-full object-cover"
+                          onError={handleImageError}
                         />
                       </div>
 

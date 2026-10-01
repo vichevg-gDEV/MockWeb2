@@ -1,5 +1,6 @@
 import React from 'react';
 import { HairModelsScroll } from './HairModelsScroll';
+import { getAssetUrl } from '../utils/assetPath';
 
 interface HeroProps {
   onOpenBooking: () => void;
@@ -14,7 +15,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBooking }) => {
         <div className="relative mx-auto my-3 flex items-center justify-center">
           <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-[420px] md:h-[420px] transition-transform duration-700 hover:scale-[1.01] select-none [mask-image:radial-gradient(circle_at_center,black_75%,transparent_98%)]">
             <img
-              src="/logo.png"
+              src={getAssetUrl('logo.png')}
               alt="VIP Beauty House Official Logo"
               className="w-full h-full object-contain pointer-events-none drop-shadow-[0_4px_25px_rgba(212,175,55,0.35)]"
               loading="eager"

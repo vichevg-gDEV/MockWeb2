@@ -11,7 +11,7 @@ export const PRODUCTS: Product[] = [
     price: 450,
     specs: 'Дължина: 50 / 60 / 70 см',
     stock: 4,
-    image: '/src/assets/images/product_slavic_hair_1790362396264.jpg',
+    image: './src/assets/images/product_slavic_hair_1790362396264.jpg',
     details: [
       '100% натурален славянски косъм Remy',
       'Двоен ръчен шев против разплитане',
@@ -29,7 +29,7 @@ export const PRODUCTS: Product[] = [
     price: 210,
     specs: '45 см (50 гр) • 20 бр. ленти',
     stock: 6,
-    image: '/src/assets/images/product_tape_keratin_1790362406376.jpg',
+    image: './src/assets/images/product_tape_keratin_1790362406376.jpg',
     details: [
       'Ултратънък медицински хипоалергенен стикер',
       'Не утежнява естествения косъм в корена',
@@ -46,7 +46,7 @@ export const PRODUCTS: Product[] = [
     price: 180,
     specs: '50 см • 50 кичура (0.8g/бр)',
     stock: 2,
-    image: '/src/assets/images/product_tape_keratin_1790362406376.jpg',
+    image: './src/assets/images/product_tape_keratin_1790362406376.jpg',
     details: [
       'Високочист италиански кератин',
       'Устойчивост на солена вода и топлина',
@@ -62,7 +62,7 @@ export const PRODUCTS: Product[] = [
     price: 310,
     specs: '50 см / 7 части / 120 гр.',
     stock: 3,
-    image: '/src/assets/images/product_slavic_hair_1790362396264.jpg',
+    image: './src/assets/images/product_slavic_hair_1790362396264.jpg',
     details: [
       'Силиконово покритие на клипсите против приплъзване',
       'Монтаж за под 5 минути в домашни условия',
@@ -79,7 +79,7 @@ export const PRODUCTS: Product[] = [
     price: 42,
     specs: '300 мл • pH 5.5 Balancer',
     stock: 8,
-    image: '/src/assets/images/logo_vip_beauty_1790362373892.jpg',
+    image: './src/assets/images/logo_vip_beauty_1790362373892.jpg',
     details: [
       'Формула без сулфати, парабени и силикони',
       'Обогатен с хидролизиран копринен протеин',
@@ -96,7 +96,7 @@ export const PRODUCTS: Product[] = [
     price: 52,
     specs: '250 мл • Интензивно подхранване',
     stock: 0,
-    image: '/src/assets/images/logo_vip_beauty_1790362373892.jpg',
+    image: './src/assets/images/logo_vip_beauty_1790362373892.jpg',
     details: [
       'Възстановява липидния слой на косъма',
       'Придава огледален блясък без омазняване',
@@ -113,7 +113,7 @@ export const PRODUCTS: Product[] = [
     price: 210,
     specs: 'Професионален уред • 130-230°C',
     stock: 5,
-    image: '/src/assets/images/product_tape_keratin_1790362406376.jpg',
+    image: './src/assets/images/product_tape_keratin_1790362406376.jpg',
     details: [
       'Плаващи огледални титаниеви плочи',
       'Инфрачервена технология за запазване на влагата',
@@ -130,7 +130,7 @@ export const PRODUCTS: Product[] = [
     price: 75,
     specs: '50x70 см • 22 Momme Royal Silk',
     stock: 1,
-    image: '/src/assets/images/logo_vip_beauty_1790362373892.jpg',
+    image: './src/assets/images/logo_vip_beauty_1790362373892.jpg',
     details: [
       '100% органична Mulberry коприна клас 6A',
       'Антибактериална и хипоалергенна тъкан',
@@ -147,7 +147,7 @@ export const PRODUCTS: Product[] = [
     price: 1200,
     specs: '120x180 см • естествена гума от камилска пишчица',
     stock: 25,
-    image: '/src/assets/images/logo_vip_beauty_1790362373892.jpg',
+    image: './src/assets/images/logo_vip_beauty_1790362373892.jpg',
     details: [
       '100% органична Mulberry коприна клас 6A',
       'Антибактериална и хипоалергенна тъкан',
@@ -164,7 +164,7 @@ export const PRODUCTS: Product[] = [
     price: 830,
     specs: '120x180 см • естествена гума от камилска пишчица',
     stock: 4,
-    image: '/src/assets/images/logo_vip_beauty_1790362373892.jpg',
+    image: './src/assets/images/logo_vip_beauty_1790362373892.jpg',
     details: [
       '100% органична Mulberry коприна клас 6A',
       'Антибактериална и хипоалергенна тъкан',
@@ -357,7 +357,7 @@ export const TRANSFORMATIONS = [
       'Premium Slavic Hair (60 см, Балеаж #60/18)',
       'VIP Hydration Shampoo + Keratin Repair Elixir'
     ],
-    image: '/src/assets/images/transformation_balayage_1790362416484.jpg'
+    image: './src/assets/images/transformation_balayage_1790362416484.jpg'
   },
   {
     id: 'tr-2',
@@ -369,7 +369,7 @@ export const TRANSFORMATIONS = [
       'VIP Seamless Tape-In (45 см, Млечен Шоколад)',
       'Преса VIP Titanium Shine с инфраред'
     ],
-    image: '/src/assets/images/hero_luxury_hair_1790362385902.jpg'
+    image: './src/assets/images/hero_luxury_hair_1790362385902.jpg'
   },
   {
     id: 'tr-3',
@@ -381,6 +381,6 @@ export const TRANSFORMATIONS = [
       'VIP Clip-In Комплект (50 см, Топъл Кестен)',
       'Копринена Калъфка VIP Silk за грижа преди събитието'
     ],
-    image: '/src/assets/images/transformation_balayage_1790362416484.jpg'
+    image: './src/assets/images/transformation_balayage_1790362416484.jpg'
   }
 ];

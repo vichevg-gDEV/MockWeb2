@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getAssetUrl } from '../utils/assetPath';
 
 interface HeaderProps {
   cartCount: number;
@@ -56,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({ cartCount, onOpenCart, onOpenBoo
           <a href="#home" className="flex items-center gap-3.5 group">
             <div className="relative w-11 h-11 flex items-center justify-center overflow-hidden">
               <img
-                src="/logo.png"
+                src={getAssetUrl('logo.png')}
                 alt="VIP Beauty House Logo"
                 className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
               />

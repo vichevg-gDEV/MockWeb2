@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { getAssetUrl, handleImageError } from '../utils/assetPath';
 
 interface HairModel {
   id: string;
@@ -11,49 +12,49 @@ interface HairModel {
 const HAIR_MODELS: HairModel[] = [
   {
     id: 'hm-1',
-    image: '/src/assets/images/model_blonde_balayage_1790363897560.jpg',
+    image: './src/assets/images/model_blonde_balayage_1790363897560.jpg',
     title: 'Платинен Шампан Балеаж',
     length: '60 см • Славянски клас',
     technique: 'AirTouch + Премиум Треси'
   },
   {
     id: 'hm-2',
-    image: '/src/assets/images/model_brunette_volume_1790363910076.jpg',
+    image: './src/assets/images/model_brunette_volume_1790363910076.jpg',
     title: 'Шоколадов Обем & Карамел',
     length: '55 см • Плътен край',
     technique: 'Холивудски Вълни & Сгъстяване'
   },
   {
     id: 'hm-3',
-    image: '/src/assets/images/model_honey_extensions_1790363921271.jpg',
+    image: './src/assets/images/model_honey_extensions_1790363921271.jpg',
     title: 'Медено Златист Блясък',
     length: '65 см • Екстра Дължина',
     technique: 'Славянска Коса Remy'
   },
   {
     id: 'hm-4',
-    image: '/src/assets/images/model_copper_waves_1790363930930.jpg',
+    image: './src/assets/images/model_copper_waves_1790363930930.jpg',
     title: 'Меден Бронзов Меланж',
     length: '50 см • Натурална чупка',
     technique: 'Тониране + Микропръстени'
   },
   {
     id: 'hm-5',
-    image: '/src/assets/images/model_sleek_black_1790363938545.jpg',
+    image: './src/assets/images/model_sleek_black_1790363938545.jpg',
     title: 'Огледално Гладка Glass Hair',
     length: '70 см • Копринена мекота',
     technique: 'Италиански Кератинов Монтаж'
   },
   {
     id: 'hm-6',
-    image: '/src/assets/images/hero_luxury_hair_1790362385902.jpg',
+    image: './src/assets/images/hero_luxury_hair_1790362385902.jpg',
     title: 'Пшенично Русо с Обем',
     length: '50 см • Ултралек монтаж',
     technique: 'VIP Seamless Tape-In'
   },
   {
     id: 'hm-7',
-    image: '/src/assets/images/transformation_balayage_1790362416484.jpg',
+    image: './src/assets/images/transformation_balayage_1790362416484.jpg',
     title: 'Скандинавско Пепеляво Русо',
     length: '60 см • Пълна трансформация',
     technique: '3 реда ръчно шити треси'
@@ -135,10 +136,11 @@ export const HairModelsScroll: React.FC<{ onBookLook?: (lookName: string) => voi
                 className="group relative w-48 sm:w-56 md:w-60 h-64 sm:h-72 md:h-80 rounded-xl overflow-hidden gold-border bg-[#121212] cursor-pointer shrink-0 transition-transform duration-300 hover:scale-[1.03] hover:border-[#D4AF37] shadow-lg"
               >
                 <img
-                  src={model.image}
+                  src={getAssetUrl(model.image)}
                   alt={model.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-95"
                   loading="lazy"
+                  onError={handleImageError}
                 />
 
                 {/* Dark gradient overlay for text readability */}
@@ -198,9 +200,10 @@ export const HairModelsScroll: React.FC<{ onBookLook?: (lookName: string) => voi
             <div className="space-y-4">
               <div className="w-full h-72 sm:h-80 max-h-[50vh] rounded-xl overflow-hidden bg-black gold-border relative">
                 <img
-                  src={selectedModel.image}
+                  src={getAssetUrl(selectedModel.image)}
                   alt={selectedModel.title}
                   className="w-full h-full object-cover"
+                  onError={handleImageError}
                 />
               </div>
 
