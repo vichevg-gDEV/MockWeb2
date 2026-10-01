@@ -1,0 +1,6 @@
+{
+  "name": "VIP Beauty House",
+  "description": "Луксозен салон за удължаване на коса, висша колористика и онлайн бутик в гр. Варна.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
