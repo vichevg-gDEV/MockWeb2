@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CartItem } from '../types';
 
 interface CheckoutModalProps {
@@ -19,11 +19,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [email, setEmail] = useState('');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
-  const [courier, setCourier] = useState<'econt' | 'speedy'>('econt');
+  const [courier, setCourier] = useState<'speedy' | 'econt'>('econt');
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('cod');
   const [notes, setNotes] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<{
+  const [loading, setLoading] = useState(false);
+
+  const [orderConfirmed, setOrderConfirmed] = useState<{
     orderId: string;
     total: number;
     name: string;
@@ -31,13 +32,40 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     courier: string;
   } | null>(null);
 
-  const subtotal = items.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
-  const shipping = subtotal >= 150 ? 0 : 7;
-  const total = subtotal + shipping;
+  const subtotal = items.reduce((acc, i) => acc + i.product.price * i.quantity, 0);
+  const deliveryFee = subtotal >= 150 ? 0 : 7;
+  const finalTotal = subtotal + deliveryFee;
 
-  useEffect(() => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !phone || !city || !address) return;
+
+    setLoading(true);
+    setTimeout(() => {
+      const generatedId = 'VIP-ORD-' + Math.floor(10000 + Math.random() * 90000);
+      setOrderConfirmed({
+        orderId: generatedId,
+        total: finalTotal,
+        name,
+        phone,
+        courier: courier === 'econt' ? 'Еконт' : 'Спиди'
+      });
+      setLoading(false);
+      onOrderComplete();
+    }, 800);
+  };
+
+  const handleFinish = () => {
+    setOrderConfirmed(null);
+    onClose();
+  };
+
+  // Keyboard shortcut to close modal via Escape
+  React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+      }
     };
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
@@ -47,31 +75,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     };
   }, [isOpen, onClose]);
 
+  // Early return ONLY after all hooks have been invoked unconditionally
   if (!isOpen) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name && phone && city && address) {
-      setIsSubmitting(true);
-      setTimeout(() => {
-        const fakeOrderId = 'VIP-ORD-' + Math.floor(10000 + Math.random() * 90000);
-        setOrderSuccess({
-          orderId: fakeOrderId,
-          total: total,
-          name: name,
-          phone: phone,
-          courier: courier === 'econt' ? 'Еконт' : 'Спиди'
-        });
-        setIsSubmitting(false);
-        onOrderComplete();
-      }, 800);
-    }
-  };
-
-  const handleCloseAfterSuccess = () => {
-    setOrderSuccess(null);
-    onClose();
-  };
 
   return (
     <div
@@ -84,6 +89,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         onClick={(e) => e.stopPropagation()}
         className="bg-[#111111] border border-[#D4AF37]/50 rounded-2xl max-w-lg w-full p-4 sm:p-6 relative shadow-[0_0_50px_rgba(0,0,0,0.9)] my-auto cursor-default"
       >
+        {/* Prominent High-Visibility Gold "X" Close Button */}
         <button
           onClick={onClose}
           type="button"
@@ -94,42 +100,46 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <i className="fa-solid fa-xmark text-base sm:text-lg font-bold group-hover:scale-110 transition-transform"></i>
         </button>
 
-        {orderSuccess ? (
+        {orderConfirmed ? (
           <div className="text-center py-4 space-y-4 animate-fadeIn">
             <div className="w-14 h-14 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#E6CA65] text-xl mx-auto">
               <i className="fa-solid fa-check"></i>
             </div>
+
             <div>
               <span className="text-[11px] uppercase tracking-widest text-[#E6CA65] font-semibold block mb-0.5">
                 Поръчката е приета успешно
               </span>
               <h3 className="font-cinzel text-xl font-bold text-white">
-                Благодарим Ви, {orderSuccess.name}!
+                Благодарим Ви, {orderConfirmed.name}!
               </h3>
             </div>
+
             <div className="bg-[#181818] p-4 rounded-xl border border-[#D4AF37]/20 text-left text-xs space-y-2">
               <div className="flex justify-between border-b border-[#D4AF37]/15 pb-1.5">
                 <span className="text-gray-400">Номер на поръчка:</span>
-                <span className="font-mono text-[#E6CA65] font-bold">{orderSuccess.orderId}</span>
+                <span className="font-mono text-[#E6CA65] font-bold">{orderConfirmed.orderId}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Куриер за доставка:</span>
-                <span className="text-white font-medium">{orderSuccess.courier} (с опция Преглед)</span>
+                <span className="text-white font-medium">{orderConfirmed.courier} (с опция Преглед)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Телефон за връзка:</span>
-                <span className="text-white font-medium tabular-nums">{orderSuccess.phone}</span>
+                <span className="text-white font-medium tabular-nums">{orderConfirmed.phone}</span>
               </div>
               <div className="flex justify-between pt-1.5 border-t border-[#D4AF37]/15 font-semibold">
                 <span className="text-white">Крайна сума за плащане:</span>
-                <span className="font-cinzel text-[#E6CA65] text-sm tabular-nums">{orderSuccess.total} лв.</span>
+                <span className="font-cinzel text-[#E6CA65] text-sm tabular-nums">{orderConfirmed.total} лв.</span>
               </div>
             </div>
+
             <p className="text-[11px] text-gray-400 font-light leading-relaxed">
               Наш оператор ще се свърже с Вас за потвърждение на адреса за доставка в рамките на 2 работни часа. Пратката ще бъде изпратена с опция за преглед.
             </p>
+
             <button
-              onClick={handleCloseAfterSuccess}
+              onClick={handleFinish}
               className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-black gold-btn-gradient shadow"
             >
               Затвори и се върни в магазина
@@ -146,20 +156,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </h3>
             </div>
 
-            {/* Compact items preview */}
+            {/* Order Items Preview - Compact */}
             <div className="bg-[#181818] p-2.5 rounded-xl border border-[#D4AF37]/15 max-h-24 overflow-y-auto space-y-1.5 text-xs">
-              {items.map((item) => (
-                <div key={item.product.id} className="flex justify-between items-center text-gray-300">
+              {items.map((i) => (
+                <div key={i.product.id} className="flex justify-between items-center text-gray-300">
                   <span className="truncate max-w-[220px] text-white text-[11px]">
-                    {item.quantity}x {item.product.title}
+                    {i.quantity}x {i.product.title}
                   </span>
                   <span className="font-cinzel text-[#E6CA65] font-bold text-xs tabular-nums">
-                    {item.product.price * item.quantity} лв.
+                    {i.product.price * i.quantity} лв.
                   </span>
                 </div>
               ))}
             </div>
 
+            {/* Customer Inputs - Compact */}
             <div className="space-y-2.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <input
@@ -207,7 +218,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 className="w-full bg-[#181818] border border-[#D4AF37]/25 rounded-lg py-2 px-3 text-xs text-white placeholder-gray-500 focus:border-[#D4AF37] focus:outline-none"
               />
 
-              {/* Courier selection */}
+              {/* Courier Selection - Compact */}
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[#E6CA65] font-semibold mb-1.5">
                   Избор на куриер
@@ -229,6 +240,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     />
                     <span className="text-white text-[11px] font-medium">Еконт Експрес</span>
                   </label>
+
                   <label
                     className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition ${
                       courier === 'speedy'
@@ -248,7 +260,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
-              {/* Payment method */}
+              {/* Payment Method - Compact */}
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-[#E6CA65] font-semibold mb-1.5">
                   Начин на плащане
@@ -268,10 +280,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       onChange={() => setPaymentMethod('cod')}
                       className="accent-[#D4AF37]"
                     />
-                    <span className="text-white text-[10px] sm:text-[11px]">
-                      Наложен платеж (в брой/карта)
-                    </span>
+                    <span className="text-white text-[10px] sm:text-[11px]">Наложен платеж (в брой/карта)</span>
                   </label>
+
                   <label
                     className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition ${
                       paymentMethod === 'card'
@@ -297,10 +308,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full bg-[#181818] border border-[#D4AF37]/25 rounded-lg py-1.5 px-3 text-xs text-white placeholder-gray-500 focus:border-[#D4AF37] focus:outline-none"
-              />
+              ></textarea>
             </div>
 
-            {/* Order totals summary */}
+            {/* Price Breakdown - Compact */}
             <div className="pt-2 border-t border-[#D4AF37]/20 space-y-1 text-xs text-gray-300">
               <div className="flex justify-between text-[11px]">
                 <span>Междинна сума:</span>
@@ -309,34 +320,51 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="flex justify-between text-[11px]">
                 <span>Доставка:</span>
                 <span className="tabular-nums text-white">
-                  {shipping === 0 ? <strong className="text-[#E6CA65]">БЕЗПЛАТНА</strong> : `${shipping} лв.`}
+                  {deliveryFee === 0 ? (
+                    <strong className="text-[#E6CA65]">БЕЗПЛАТНА</strong>
+                  ) : (
+                    `${deliveryFee} лв.`
+                  )}
                 </span>
               </div>
               <div className="flex justify-between pt-1.5 border-t border-neutral-800 text-xs sm:text-sm font-semibold text-white">
                 <span>Общо за плащане:</span>
-                <span className="font-cinzel text-[#E6CA65] text-sm sm:text-base tabular-nums">{total} лв.</span>
+                <span className="font-cinzel text-[#E6CA65] text-sm sm:text-base tabular-nums">{finalTotal} лв.</span>
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={loading}
               className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-black gold-btn-gradient shadow-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isSubmitting ? (
+              {loading ? (
                 <>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
                   Изпращане на поръчката...
                 </>
               ) : (
                 <>
-                  <span>Потвърди Поръчката ({total} лв.)</span>
-                  <i className="fa-solid fa-arrow-right text-xs"></i>
+                  <i className="fa-solid fa-lock text-xs" aria-hidden="true"></i>
+                  Потвърди поръчката ({finalTotal} лв.)
                 </>
               )}
             </button>
+
+            {/* Back to Products / Continue Shopping option */}
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-gray-400 hover:text-[#E6CA65] transition inline-flex items-center gap-1.5 py-1 px-3 rounded-lg hover:bg-neutral-900 border border-transparent hover:border-[#D4AF37]/30"
+              >
+                <i className="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>
+                <span>Желаете още продукти? Върнете се към магазина</span>
+              </button>
+            </div>
           </form>
         )}
+
       </div>
     </div>
   );

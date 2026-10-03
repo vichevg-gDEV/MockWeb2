@@ -16,28 +16,26 @@ import { Footer } from './components/Footer';
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = localStorage.getItem('vip_salon_inventory_stock');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const stockMap = new Map<string, number>();
-            parsed.forEach((p: any) => {
-              if (p && p.id && typeof p.stock === 'number') {
-                stockMap.set(p.id, p.stock);
-              }
-            });
+    const saved = localStorage.getItem('vip_salon_inventory_stock');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const stockMap = new Map<string, number>();
+          parsed.forEach((p: any) => {
+            if (p && p.id && typeof p.stock === 'number') {
+              stockMap.set(p.id, p.stock);
+            }
+          });
 
-            return PRODUCTS.map((prod) => ({
-              ...prod,
-              stock: stockMap.has(prod.id) ? (stockMap.get(prod.id) as number) : prod.stock
-            }));
-          }
+          return PRODUCTS.map((prod) => ({
+            ...prod,
+            stock: stockMap.has(prod.id) ? (stockMap.get(prod.id) as number) : prod.stock
+          }));
         }
+      } catch (e) {
+        console.error('Failed to parse inventory stock', e);
       }
-    } catch (e) {
-      console.warn('Storage read skipped:', e);
     }
     return PRODUCTS;
   });
@@ -60,24 +58,12 @@ export default function App() {
 
   // Persist stock inventory updates to localStorage
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('vip_salon_inventory_stock', JSON.stringify(products));
-      }
-    } catch (e) {
-      console.warn('Storage write skipped:', e);
-    }
+    localStorage.setItem('vip_salon_inventory_stock', JSON.stringify(products));
   }, [products]);
 
   const handleResetStock = () => {
     setProducts(PRODUCTS);
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.removeItem('vip_salon_inventory_stock');
-      }
-    } catch (e) {
-      console.warn('Storage remove skipped:', e);
-    }
+    localStorage.removeItem('vip_salon_inventory_stock');
   };
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);

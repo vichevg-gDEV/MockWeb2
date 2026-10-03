@@ -8,21 +8,6 @@
     
     <link rel="icon" type="image/png" href="./logo.png" />
     
-    <script>
-      // Single Page Application URL & path recovery for GitHub Pages
-      (function() {
-        var path = window.location.pathname;
-        if (path.split('/').length > 2 && !path.endsWith('/') && !path.includes('.')) {
-          window.location.replace(path + '/' + window.location.search + window.location.hash);
-        }
-        var redirect = sessionStorage.redirect;
-        delete sessionStorage.redirect;
-        if (redirect && redirect !== location.href) {
-          history.replaceState(null, null, redirect);
-        }
-      })();
-    </script>
-    
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="VIP Beauty House | Луксозни Удължения за Коса & Салон Варна" />
