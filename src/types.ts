@@ -1,7 +1,7 @@
 export interface Product {
   id: string;
   title: string;
-  category: 'extensions' | 'cosmetics' | 'tools' | 'accessories';
+  category: 'extensions' | 'cosmetics' | 'tools' | 'accessories' | string;
   categoryLabel: string;
   badge?: string;
   description: string;
@@ -28,6 +28,7 @@ export interface SalonService {
 }
 
 export interface PriceItem {
+  id?: string;
   service: string;
   duration: string;
   price: string;

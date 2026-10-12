@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { STYLISTS, SALON_SERVICES } from '../data/salonData';
-import { BookingFormState } from '../types';
+import { STYLISTS, PRICE_LIST } from '../data/salonData';
+import { BookingFormState, PriceItem } from '../types';
 
 interface BookingProps {
   selectedServicePreload?: string;
   onClearPreload?: () => void;
+  priceList?: PriceItem[];
 }
 
-export const Booking: React.FC<BookingProps> = ({ selectedServicePreload, onClearPreload }) => {
+export const Booking: React.FC<BookingProps> = ({
+  selectedServicePreload,
+  onClearPreload,
+  priceList = PRICE_LIST
+}) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [form, setForm] = useState<BookingFormState>({
@@ -169,36 +174,11 @@ export const Booking: React.FC<BookingProps> = ({ selectedServicePreload, onClea
                   className="w-full bg-[#161616] border border-[#D4AF37]/30 rounded-lg py-3 px-4 text-white text-sm focus:border-[#D4AF37] focus:outline-none transition"
                 >
                   <option value="" disabled>-- Моля, изберете процедура --</option>
-                  <option value="Безплатна консултация за удължаване на коса (20 мин.)">
-                    Безплатна консултация за удължаване на коса с мостри (20 мин. - БЕЗПЛАТНО)
-                  </option>
-                  <option value="Поставяне на треси с микропръстени">
-                    Поставяне на треси с микропръстени (от 60 лв. / ред)
-                  </option>
-                  <option value="Поставяне на стикери (Tape-In)">
-                    Поставяне на стикери (Tape-In пакет - 120 лв.)
-                  </option>
-                  <option value="Поставяне на кератинови кичури">
-                    Поставяне на кератинови кичури (2.50 лв. / кичур)
-                  </option>
-                  <option value="Поддръжка на екстеншъни (сваляне и монтаж)">
-                    Поддръжка на екстеншъни / Сваляне (от 50 лв.)
-                  </option>
-                  <option value="Балеаж / AirTouch / Тониране">
-                    Балеаж / AirTouch / Тониране със защитна терапия (220 - 350 лв.)
-                  </option>
-                  <option value="Боядисване с луксозна безамонячна боя">
-                    Боядисване с луксозна боя (80 - 130 лв.)
-                  </option>
-                  <option value="Ботокс за коса / Кератинова терапия">
-                    Ботокс за коса / Кератиново възстановяване (130 - 220 лв.)
-                  </option>
-                  <option value="Дамско подстригване + Сешоар">
-                    Дамско подстригване + Оформяне със сешоар (60 - 70 лв.)
-                  </option>
-                  <option value="Професионален вечерен VIP грим">
-                    Професионален вечерен VIP грим (90 лв.)
-                  </option>
+                  {priceList.map((item, pIdx) => (
+                    <option key={item.id || pIdx} value={item.service}>
+                      {item.service} ({item.price})
+                    </option>
+                  ))}
                 </select>
               </div>
 

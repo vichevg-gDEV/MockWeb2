@@ -1,7 +1,11 @@
 import React from 'react';
 import { getAssetUrl } from '../utils/assetPath';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  onOpenAdmin?: () => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
   return (
     <footer className="bg-black border-t border-[#D4AF37]/20 text-gray-400 text-xs py-14">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -100,7 +104,23 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="pt-8 border-t border-[#D4AF37]/15 flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px] text-gray-500">
-          <span>VIP BEAUTY HOUSE © 2026. Всички права запазени.</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span>VIP BEAUTY HOUSE © 2026. Всички права запазени.</span>
+            {onOpenAdmin && (
+              <>
+                <span className="text-gray-700">•</span>
+                <button
+                  type="button"
+                  onClick={onOpenAdmin}
+                  className="hover:text-[#E6CA65] transition inline-flex items-center gap-1.5 opacity-50 hover:opacity-100 cursor-pointer"
+                  title="Административен панел (Клавишна комбинация: Ctrl + Shift + A)"
+                >
+                  <i className="fa-solid fa-lock text-[10px]"></i>
+                  <span>Администрация</span>
+                </button>
+              </>
+            )}
+          </div>
           <span>Първокласен луксозен стандарт за удължаване на коса.</span>
         </div>
 

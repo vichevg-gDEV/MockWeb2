@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 import { SALON_SERVICES, PRICE_LIST } from '../data/salonData';
+import { SalonService, PriceItem } from '../types';
 
 interface ServicesProps {
   onSelectServiceForBooking: (serviceName: string) => void;
+  salonServices?: SalonService[];
+  priceList?: PriceItem[];
 }
 
-export const Services: React.FC<ServicesProps> = ({ onSelectServiceForBooking }) => {
+export const Services: React.FC<ServicesProps> = ({
+  onSelectServiceForBooking,
+  salonServices = SALON_SERVICES,
+  priceList = PRICE_LIST
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredPrices = PRICE_LIST.filter(item =>
+  const filteredPrices = priceList.filter(item =>
     item.service.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -32,7 +39,7 @@ export const Services: React.FC<ServicesProps> = ({ onSelectServiceForBooking })
 
         {/* 6 Services Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {SALON_SERVICES.map((srv) => (
+          {salonServices.map((srv) => (
             <div
               key={srv.id}
               className="bg-[#0f0f0f] p-8 rounded-xl gold-border gold-border-glow transition flex flex-col justify-between"
