@@ -67,6 +67,15 @@ git push -u origin main
    ```
 3. Send this link directly to your client! The site loads with all images, stylesheets, shopping cart, booking form, and hidden admin panel functioning seamlessly.
 
+> **💡 Troubleshooting "Blank White Page":**
+> If you ever see a blank white page on GitHub Pages, check your repository **Settings > Pages > Source**:
+> - **Must be set to "GitHub Actions"**, NOT *"Deploy from a branch > main / root"*. (Browsers cannot execute raw TypeScript/JSX from the uncompiled source branch; the automated GitHub Actions workflow compiles the app and publishes the production `dist/` bundle).
+> - **Alternative 1-Command Deploy (`gh-pages`)**: If you prefer deploying from your terminal without GitHub Actions, simply run:
+>   ```bash
+>   npm run deploy
+>   ```
+>   Then in **Settings > Pages**, choose **Deploy from a branch** > branch **gh-pages** > folder **/ (root)**.
+
 ---
 
 ## 💻 Local Development
