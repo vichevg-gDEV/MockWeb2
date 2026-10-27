@@ -10,7 +10,11 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "start": "node server/server.mjs",
+    "test": "node --test \"server/*.test.mjs\"",
+    "seed": "node server/make-seed.mjs",
+    "set-pin": "node server/set-pin.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

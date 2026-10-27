@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Server data: orders, bookings, admin passcode hash, uploads (never commit)
+data/
