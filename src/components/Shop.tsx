@@ -7,14 +7,12 @@ interface ShopProps {
   products?: Product[];
   cartItems?: CartItem[];
   onAddToCart: (product: Product) => void;
-  onResetStock?: () => void;
 }
 
 export const Shop: React.FC<ShopProps> = ({
   products = PRODUCTS,
   cartItems = [],
-  onAddToCart,
-  onResetStock
+  onAddToCart
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -86,21 +84,6 @@ export const Shop: React.FC<ShopProps> = ({
           <p className="text-gray-400 text-sm sm:text-base font-light">
             Поръчайте 100% сертифицирана славянска и европейска естествена коса, професионална козметика и салонни уреди с експресна доставка до всяка точка на България.
           </p>
-
-          {/* Quick status & tester reset helper */}
-          {onResetStock && (
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={onResetStock}
-                className="text-[11px] text-neutral-400 hover:text-[#E6CA65] transition inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-neutral-900 border border-neutral-800 hover:border-[#D4AF37]/40"
-                title="Възстановява първоначалните наличности на всички продукти за повторно тестване"
-              >
-                <i className="fa-solid fa-arrows-rotate text-[10px]"></i>
-                <span>Възстанови тестови наличности</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Category Filter Controls */}

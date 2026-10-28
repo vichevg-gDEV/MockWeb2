@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Product, CartItem, PriceItem, SalonService } from './types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Product, CartItem, PriceItem, SalonService, Catalog } from './types';
 import { PRODUCTS, PRICE_LIST, SALON_SERVICES } from './data/salonData';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -14,94 +14,90 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { Footer } from './components/Footer';
 import { AdminPanel } from './components/AdminPanel';
+import * as api from './api';
+
+// Old versions kept the shop in each visitor's browser. Clear it so nothing stale
+// (including the old admin PIN) stays behind.
+const LEGACY_STORAGE_KEYS = [
+  'vip_salon_products_full',
+  'vip_salon_inventory_stock',
+  'vip_salon_pricelist_data',
+  'vip_salon_services_cards',
+  'vip_admin_pin'
+];
+
+const CATALOG_REFRESH_MS = 30_000;
 
 export default function App() {
-  // 1. PRODUCTS STATE WITH PERSISTENCE
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('vip_salon_products_full');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse full products list', e);
-      }
+  // The server is the single source of truth for products, stock, prices and services.
+  // The bundled data is only shown until the first answer arrives (or if the server is unreachable).
+  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [priceList, setPriceList] = useState<PriceItem[]>(PRICE_LIST);
+  const [salonServices, setSalonServices] = useState<SalonService[]>(SALON_SERVICES);
+
+  // CART AND CHECKOUT STATE
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedServicePreload, setSelectedServicePreload] = useState<string>('');
+
+  // Used to ignore a slow background refresh that finished after a newer change was applied.
+  const changeCounter = useRef(0);
+  const lastSeenVersion = useRef<string | null>(null);
+
+  const applyCatalog = useCallback((catalog: Catalog) => {
+    setProducts(catalog.products);
+    setPriceList(catalog.priceList);
+    setSalonServices(catalog.salonServices);
+
+    // Keep the cart in line with what is really on the shelf (stock, price, removed items).
+    setCartItems((prev) =>
+      prev
+        .map((item) => {
+          const fresh = catalog.products.find((p) => p.id === item.product.id);
+          if (!fresh || fresh.stock <= 0) return null;
+          return { product: fresh, quantity: Math.min(item.quantity, fresh.stock) };
+        })
+        .filter((item): item is CartItem => item !== null)
+    );
+  }, []);
+
+  const refreshCatalog = useCallback(async () => {
+    const startedAt = changeCounter.current;
+    try {
+      const data = await api.getCatalog();
+      if (startedAt !== changeCounter.current) return;
+      if (data.updatedAt && data.updatedAt === lastSeenVersion.current) return;
+      lastSeenVersion.current = data.updatedAt || null;
+      applyCatalog(data);
+    } catch {
+      /* server unreachable: keep showing what we have */
     }
-
-    // Fallback: check older stock map
-    const stockSaved = localStorage.getItem('vip_salon_inventory_stock');
-    if (stockSaved) {
-      try {
-        const parsed = JSON.parse(stockSaved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const stockMap = new Map<string, number>();
-          parsed.forEach((p: any) => {
-            if (p && p.id && typeof p.stock === 'number') {
-              stockMap.set(p.id, p.stock);
-            }
-          });
-          return PRODUCTS.map((prod) => ({
-            ...prod,
-            stock: stockMap.has(prod.id) ? (stockMap.get(prod.id) as number) : prod.stock
-          }));
-        }
-      } catch (e) {
-        console.error('Failed to parse legacy stock', e);
-      }
-    }
-
-    return PRODUCTS;
-  });
-
-  // Save products whenever updated
-  useEffect(() => {
-    localStorage.setItem('vip_salon_products_full', JSON.stringify(products));
-    localStorage.setItem('vip_salon_inventory_stock', JSON.stringify(products));
-  }, [products]);
-
-  // 2. PRICE LIST (SERVICES) STATE WITH PERSISTENCE
-  const [priceList, setPriceList] = useState<PriceItem[]>(() => {
-    const saved = localStorage.getItem('vip_salon_pricelist_data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse price list', e);
-      }
-    }
-    return PRICE_LIST;
-  });
+  }, [applyCatalog]);
 
   useEffect(() => {
-    localStorage.setItem('vip_salon_pricelist_data', JSON.stringify(priceList));
-  }, [priceList]);
-
-  // 3. MAIN SALON SERVICE CARDS WITH PERSISTENCE
-  const [salonServices, setSalonServices] = useState<SalonService[]>(() => {
-    const saved = localStorage.getItem('vip_salon_services_cards');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse salon services', e);
-      }
+    try {
+      LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+      sessionStorage.removeItem('vip_admin_auth');
+    } catch {
+      /* storage not available */
     }
-    return SALON_SERVICES;
-  });
 
-  useEffect(() => {
-    localStorage.setItem('vip_salon_services_cards', JSON.stringify(salonServices));
-  }, [salonServices]);
+    refreshCatalog();
+    const timer = window.setInterval(refreshCatalog, CATALOG_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshCatalog();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refreshCatalog);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refreshCatalog);
+    };
+  }, [refreshCatalog]);
 
-  // 4. HIDDEN ADMIN PANEL ACCESS STATE
+  // HIDDEN ADMIN PANEL ACCESS STATE
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(() => {
     return typeof window !== 'undefined' && window.location.hash === '#admin';
   });
@@ -138,92 +134,74 @@ export default function App() {
     }
   };
 
-  // CART AND CHECKOUT STATE
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [selectedServicePreload, setSelectedServicePreload] = useState<string>('');
+  // ADMIN ACTIONS: every change is saved on the server first, then shown to everyone.
+  const runAdmin = async <T,>(action: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await action();
+    } catch (err) {
+      if (err instanceof api.ApiError && err.status === 401) {
+        window.dispatchEvent(new Event('vip-admin-unauthorized'));
+        return null;
+      }
+      window.alert(err instanceof Error ? err.message : 'Неуспешно записване. Опитайте отново.');
+      refreshCatalog();
+      return null;
+    }
+  };
+
+  const applyAdminResult = (result: { catalog: Catalog } | null): boolean => {
+    if (!result) return false;
+    changeCounter.current += 1;
+    lastSeenVersion.current = null;
+    applyCatalog(result.catalog);
+    return true;
+  };
 
   // INVENTORY PRODUCT HANDLERS
-  const handleAddProduct = (newProduct: Product) => {
-    setProducts((prev) => [newProduct, ...prev]);
-  };
+  const handleAddProduct = async (newProduct: Product) =>
+    applyAdminResult(await runAdmin(() => api.adminAddProduct(newProduct)));
 
-  const handleUpdateProduct = (updatedProduct: Product) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-    );
-  };
+  const handleUpdateProduct = async (updatedProduct: Product) =>
+    applyAdminResult(await runAdmin(() => api.adminUpdateProduct(updatedProduct)));
 
-  const handleDeleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
-    setCartItems((prev) => prev.filter((ci) => ci.product.id !== productId));
-  };
+  const handleDeleteProduct = async (productId: string) =>
+    applyAdminResult(await runAdmin(() => api.adminDeleteProduct(productId)));
 
-  const handleUpdateStock = (productId: string, newStock: number) => {
-    const safeStock = Math.max(0, newStock);
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, stock: safeStock } : p))
-    );
-
-    // Sync cart quantities if higher than new stock
-    setCartItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.product.id === productId) {
-            if (safeStock === 0) return null;
-            if (item.quantity > safeStock) {
-              return { ...item, quantity: safeStock };
-            }
-          }
-          return item;
-        })
-        .filter((item): item is CartItem => item !== null)
-    );
-  };
-
-  const handleResetStock = () => {
-    setProducts(PRODUCTS);
-    localStorage.removeItem('vip_salon_products_full');
-    localStorage.removeItem('vip_salon_inventory_stock');
-  };
+  const handleUpdateStock = async (productId: string, newStock: number) =>
+    applyAdminResult(await runAdmin(() => api.adminSetStock(productId, Math.max(0, Math.floor(newStock)))));
 
   // SERVICE & PRICING HANDLERS
-  const handleAddPriceItem = (item: PriceItem) => {
-    setPriceList((prev) => [...prev, item]);
-  };
+  const savePriceList = async (next: PriceItem[]) =>
+    applyAdminResult(await runAdmin(() => api.adminSavePriceList(next)));
 
-  const handleUpdatePriceItem = (index: number, updatedItem: PriceItem) => {
-    setPriceList((prev) => prev.map((item, idx) => (idx === index ? updatedItem : item)));
-  };
+  const handleAddPriceItem = (item: PriceItem) => savePriceList([...priceList, item]);
 
-  const handleDeletePriceItem = (index: number) => {
-    setPriceList((prev) => prev.filter((_, idx) => idx !== index));
-  };
+  const handleUpdatePriceItem = (index: number, updatedItem: PriceItem) =>
+    savePriceList(priceList.map((item, idx) => (idx === index ? updatedItem : item)));
 
-  const handleAddSalonService = (newService: SalonService) => {
-    setSalonServices((prev) => [...prev, newService]);
-  };
+  const handleDeletePriceItem = (index: number) =>
+    savePriceList(priceList.filter((_, idx) => idx !== index));
 
-  const handleUpdateSalonService = (id: string, updated: Partial<SalonService>) => {
-    setSalonServices((prev) =>
-      prev.map((srv) => (srv.id === id ? { ...srv, ...updated } : srv))
-    );
-  };
+  const saveSalonServices = async (next: SalonService[]) =>
+    applyAdminResult(await runAdmin(() => api.adminSaveServices(next)));
 
-  const handleDeleteSalonService = (id: string) => {
-    setSalonServices((prev) => prev.filter((srv) => srv.id !== id));
-  };
+  const handleAddSalonService = (newService: SalonService) =>
+    saveSalonServices([...salonServices, newService]);
 
-  const handleResetAllData = () => {
-    setProducts(PRODUCTS);
-    setPriceList(PRICE_LIST);
-    setSalonServices(SALON_SERVICES);
-    localStorage.removeItem('vip_salon_products_full');
-    localStorage.removeItem('vip_salon_inventory_stock');
-    localStorage.removeItem('vip_salon_pricelist_data');
-    localStorage.removeItem('vip_salon_services_cards');
-  };
+  const handleUpdateSalonService = (id: string, updated: Partial<SalonService>) =>
+    saveSalonServices(salonServices.map((srv) => (srv.id === id ? { ...srv, ...updated } : srv)));
+
+  const handleDeleteSalonService = (id: string) =>
+    saveSalonServices(salonServices.filter((srv) => srv.id !== id));
+
+  const handleImportCatalog = async (data: Partial<Catalog>) =>
+    applyAdminResult(await runAdmin(() => api.adminImportCatalog(data)));
+
+  const handleResetAllData = async () =>
+    applyAdminResult(await runAdmin(() => api.adminResetCatalog()));
+
+  // Called by the admin panel after it changed an order (cancelling puts stock back).
+  const handleCatalogFromServer = (catalog: Catalog) => applyAdminResult({ catalog });
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -290,22 +268,16 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
+  // The server already deducted the stock when it accepted the order.
   const handleOrderComplete = () => {
-    // Automatically deduct purchased quantities from inventory!
-    setProducts((prevProducts) =>
-      prevProducts.map((p) => {
-        const purchasedItem = cartItems.find((ci) => ci.product.id === p.id);
-        if (purchasedItem) {
-          const remainingStock = Math.max(0, p.stock - purchasedItem.quantity);
-          return {
-            ...p,
-            stock: remainingStock
-          };
-        }
-        return p;
-      })
-    );
     setCartItems([]);
+    lastSeenVersion.current = null;
+    refreshCatalog();
+  };
+
+  const handleCatalogOutdated = () => {
+    lastSeenVersion.current = null;
+    refreshCatalog();
   };
 
   return (
@@ -336,7 +308,6 @@ export default function App() {
           products={products}
           cartItems={cartItems}
           onAddToCart={handleAddToCart}
-          onResetStock={handleResetStock}
         />
 
         {/* Transformations Gallery */}
@@ -374,6 +345,7 @@ export default function App() {
         onClose={() => setIsCheckoutOpen(false)}
         items={cartItems}
         onOrderComplete={handleOrderComplete}
+        onCatalogOutdated={handleCatalogOutdated}
       />
 
       {/* Footer with subtle admin trigger */}
@@ -396,7 +368,9 @@ export default function App() {
         onAddSalonService={handleAddSalonService}
         onUpdateSalonService={handleUpdateSalonService}
         onDeleteSalonService={handleDeleteSalonService}
+        onImportCatalog={handleImportCatalog}
         onResetAllData={handleResetAllData}
+        onCatalogChanged={handleCatalogFromServer}
       />
     </div>
   );

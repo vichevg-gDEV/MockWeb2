@@ -188,6 +188,8 @@ describe('bookings', () => {
     assert.equal((await s.req('POST', '/api/bookings', booking({ date: '2000-01-01' }))).status, 400);
     assert.equal((await s.req('POST', '/api/bookings', booking({ date: '2099-02-31' }))).status, 400);
     assert.equal((await s.req('POST', '/api/bookings', booking({ time: '25:99' }))).status, 400);
+    assert.equal((await s.req('POST', '/api/bookings', booking({ time: '22:00' }))).status, 400, 'outside opening hours');
+    assert.equal((await s.req('POST', '/api/bookings', booking({ time: '09:30' }))).status, 400, 'before opening');
     assert.equal((await s.req('POST', '/api/bookings', booking({ stylist: 'hacker' }))).status, 400);
     assert.equal((await s.req('POST', '/api/bookings', booking({ agreedToTerms: false }))).status, 400);
     assert.equal((await s.req('POST', '/api/bookings', booking({ service: '' }))).status, 400);

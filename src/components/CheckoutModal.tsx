@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem } from '../types';
+import * as api from '../api';
 
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
   onOrderComplete: () => void;
+  /** Called when the server says stock changed, so the shop can refresh. */
+  onCatalogOutdated?: () => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
   onClose,
   items,
-  onOrderComplete
+  onOrderComplete,
+  onCatalogOutdated
 }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -20,9 +24,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
   const [courier, setCourier] = useState<'econt' | 'speedy'>('econt');
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('cod');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{
     orderId: string;
     total: number;
@@ -49,22 +53,53 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (name && phone && city && address) {
-      setIsSubmitting(true);
-      setTimeout(() => {
-        const fakeOrderId = 'VIP-ORD-' + Math.floor(10000 + Math.random() * 90000);
-        setOrderSuccess({
-          orderId: fakeOrderId,
-          total: total,
-          name: name,
-          phone: phone,
-          courier: courier === 'econt' ? 'Еконт' : 'Спиди'
-        });
-        setIsSubmitting(false);
-        onOrderComplete();
-      }, 800);
+    if (!(name && phone && city && address) || items.length === 0 || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      // The server checks the stock, takes the prices from its own catalog and keeps the order.
+      const { order } = await api.createOrder({
+        name,
+        phone,
+        email,
+        city,
+        address,
+        courier,
+        paymentMethod: 'cod',
+        notes,
+        items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity }))
+      });
+      setOrderSuccess({
+        orderId: order.id,
+        total: order.total,
+        name: order.name,
+        phone: order.phone,
+        courier: order.courier === 'econt' ? 'Еконт' : 'Спиди'
+      });
+      onOrderComplete();
+    } catch (err) {
+      if (err instanceof api.ApiError && err.code === 'insufficient_stock') {
+        const problems: { title: string | null; available: number }[] = err.data?.problems || [];
+        const details = problems
+          .map((p) => (p.title ? `${p.title} (налични: ${p.available})` : 'артикул, който вече не се предлага'))
+          .join(', ');
+        setError(
+          `Съжаляваме, някои артикули вече не са налични в избраното количество: ${details}. ` +
+            'Количката е обновена - моля, проверете я и опитайте отново.'
+        );
+        onCatalogOutdated?.();
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Поръчката не можа да бъде изпратена. Моля, опитайте отново или се свържете с нас по телефона.'
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,41 +288,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <label className="block text-[10px] uppercase tracking-wider text-[#E6CA65] font-semibold mb-1.5">
                   Начин на плащане
                 </label>
-                <div className="grid grid-cols-2 gap-2.5 text-xs">
-                  <label
-                    className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition ${
-                      paymentMethod === 'cod'
-                        ? 'bg-[#202020] border-[#D4AF37]'
-                        : 'bg-[#181818] border-[#D4AF37]/20'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={paymentMethod === 'cod'}
-                      onChange={() => setPaymentMethod('cod')}
-                      className="accent-[#D4AF37]"
-                    />
-                    <span className="text-white text-[10px] sm:text-[11px]">
-                      Наложен платеж (в брой/карта)
-                    </span>
-                  </label>
-                  <label
-                    className={`flex items-center space-x-2 p-2 rounded-lg border cursor-pointer transition ${
-                      paymentMethod === 'card'
-                        ? 'bg-[#202020] border-[#D4AF37]'
-                        : 'bg-[#181818] border-[#D4AF37]/20'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={paymentMethod === 'card'}
-                      onChange={() => setPaymentMethod('card')}
-                      className="accent-[#D4AF37]"
-                    />
-                    <span className="text-white text-[10px] sm:text-[11px]">Банкова карта онлайн</span>
-                  </label>
+                <div className="flex items-center space-x-2 p-2 rounded-lg border bg-[#202020] border-[#D4AF37]">
+                  <i className="fa-solid fa-check text-[#E6CA65] text-[10px]"></i>
+                  <span className="text-white text-[10px] sm:text-[11px]">
+                    Наложен платеж (в брой/карта при получаване)
+                  </span>
                 </div>
               </div>
 
@@ -318,9 +323,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 p-3 rounded-lg border border-red-900/60 bg-red-950/30 text-[11px] text-red-300 leading-relaxed"
+              >
+                <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                <span>{error}</span>
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || items.length === 0}
               className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-black gold-btn-gradient shadow-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

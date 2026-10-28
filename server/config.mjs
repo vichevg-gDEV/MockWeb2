@@ -57,6 +57,9 @@ export function loadConfig(env = process.env, overrides = {}) {
     shippingFee: num(env.SHIPPING_FEE, 7),
     freeShippingOver: num(env.FREE_SHIPPING_OVER, 150),
     timezone: env.SALON_TIMEZONE || 'Europe/Sofia',
+    // Bookings are only accepted inside these hours (HH:MM).
+    bookingOpen: env.BOOKING_OPEN || '10:00',
+    bookingClose: env.BOOKING_CLOSE || '19:00',
     // Public form submissions allowed per visitor IP per window.
     publicLimit: { max: num(env.PUBLIC_RATE_MAX, 10), windowMs: 10 * 60 * 1000 },
     // Failed admin logins allowed per IP, and in total, per window.

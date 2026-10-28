@@ -85,6 +85,9 @@ export function parseBookingInput(body, stylists, config) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(booking.date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(booking.time)) {
     throw bad('Невалидна дата или час.');
   }
+  if (booking.time < config.bookingOpen || booking.time > config.bookingClose) {
+    throw bad(`Резервации се приемат между ${config.bookingOpen} и ${config.bookingClose} ч.`);
+  }
   const asDate = new Date(booking.date + 'T00:00:00Z');
   if (Number.isNaN(asDate.getTime()) || asDate.toISOString().slice(0, 10) !== booking.date) {
     throw bad('Невалидна дата.');

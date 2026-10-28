@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { STYLISTS, PRICE_LIST } from '../data/salonData';
 import { BookingFormState, PriceItem } from '../types';
+import * as api from '../api';
 
 interface BookingProps {
   selectedServicePreload?: string;
@@ -37,6 +38,7 @@ export const Booking: React.FC<BookingProps> = ({
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedServicePreload) {
@@ -44,32 +46,50 @@ export const Booking: React.FC<BookingProps> = ({
     }
   }, [selectedServicePreload]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.service || !form.name || !form.phone || !form.agreedToTerms) {
+    if (!form.service || !form.name || !form.phone || !form.agreedToTerms || loading) {
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const selectedStylistObj = STYLISTS.find(s => s.id === form.stylist) || STYLISTS[0];
-      const reservationCode = 'VIP-' + Math.floor(100000 + Math.random() * 900000);
-      setSubmittedData({
-        code: reservationCode,
+    setError(null);
+    try {
+      // The reservation is saved on the server and the salon is notified right away.
+      const { booking } = await api.createBooking({
+        service: form.service,
+        stylist: form.stylist,
         date: form.date,
         time: form.time,
-        service: form.service,
-        stylistName: selectedStylistObj.name,
         name: form.name,
-        phone: form.phone
+        phone: form.phone,
+        notes: form.notes,
+        agreedToTerms: form.agreedToTerms
       });
-      setLoading(false);
+      setSubmittedData({
+        code: booking.id,
+        date: booking.date,
+        time: booking.time,
+        service: booking.service,
+        stylistName: booking.stylistName,
+        name: booking.name,
+        phone: booking.phone
+      });
       if (onClearPreload) onClearPreload();
-    }, 700);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Резервацията не можа да бъде изпратена. Моля, опитайте отново или ни се обадете.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
     setSubmittedData(null);
+    setError(null);
     setForm({
       service: '',
       stylist: 'any',
@@ -294,6 +314,16 @@ export const Booking: React.FC<BookingProps> = ({
                   Съгласен съм с политиката за поверителност на VIP Beauty House и условията за резервация.
                 </label>
               </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 p-3 rounded-lg border border-red-900/60 bg-red-950/30 text-xs text-red-300 leading-relaxed"
+                >
+                  <i className="fa-solid fa-triangle-exclamation mt-0.5" aria-hidden="true"></i>
+                  <span>{error}</span>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button

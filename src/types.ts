@@ -52,3 +52,50 @@ export interface BookingFormState {
   notes: string;
   agreedToTerms: boolean;
 }
+
+// ---------------------------------------------------------------- server data
+
+export interface Catalog {
+  products: Product[];
+  priceList: PriceItem[];
+  salonServices: SalonService[];
+}
+
+export type OrderStatus = 'new' | 'confirmed' | 'shipped' | 'completed' | 'cancelled';
+export type BookingStatus = 'new' | 'confirmed' | 'done' | 'no_show' | 'cancelled';
+
+export interface OrderRecord {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  status: OrderStatus;
+  customer: {
+    name: string;
+    phone: string;
+    email: string;
+    city: string;
+    address: string;
+    notes: string;
+  };
+  courier: 'econt' | 'speedy';
+  paymentMethod: 'cod';
+  items: { productId: string; title: string; price: number; quantity: number }[];
+  subtotal: number;
+  shipping: number;
+  total: number;
+}
+
+export interface BookingRecord {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  status: BookingStatus;
+  service: string;
+  stylistId: string;
+  stylistName: string;
+  date: string;
+  time: string;
+  name: string;
+  phone: string;
+  notes: string;
+}

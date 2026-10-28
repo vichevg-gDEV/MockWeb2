@@ -1,25 +1,76 @@
-import React, { useState, useRef } from 'react';
-import { Product, PriceItem, SalonService } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Product,
+  PriceItem,
+  SalonService,
+  Catalog,
+  OrderRecord,
+  BookingRecord,
+  OrderStatus,
+  BookingStatus
+} from '../types';
+import * as api from '../api';
 import { compressImageFile, PRESET_PRODUCT_IMAGES } from '../utils/imageCompressor';
 import { getAssetUrl, handleImageError } from '../utils/assetPath';
+
+const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  new: 'Нова',
+  confirmed: 'Потвърдена',
+  shipped: 'Изпратена',
+  completed: 'Завършена',
+  cancelled: 'Отказана'
+};
+
+const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
+  new: 'Нова',
+  confirmed: 'Потвърдена',
+  done: 'Изпълнена',
+  no_show: 'Неявяване',
+  cancelled: 'Отказана'
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  new: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  confirmed: 'bg-sky-500/15 text-sky-300 border-sky-500/40',
+  shipped: 'bg-violet-500/15 text-violet-300 border-violet-500/40',
+  completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+  done: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+  no_show: 'bg-neutral-500/15 text-neutral-300 border-neutral-500/40',
+  cancelled: 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+};
+
+const COURIER_LABELS: Record<string, string> = { econt: 'Еконт', speedy: 'Спиди' };
+
+const formatDateTime = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleString('bg-BG', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const INBOX_REFRESH_MS = 30_000;
 
 interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
-  onUpdateProduct: (product: Product) => void;
-  onAddProduct: (product: Product) => void;
-  onDeleteProduct: (productId: string) => void;
-  onUpdateStock: (productId: string, newStock: number) => void;
+  // Every change below is saved on the server; each returns true when it worked.
+  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onAddProduct: (product: Product) => Promise<boolean>;
+  onDeleteProduct: (productId: string) => Promise<boolean>;
+  onUpdateStock: (productId: string, newStock: number) => Promise<boolean>;
   priceList: PriceItem[];
-  onAddPriceItem: (item: PriceItem) => void;
-  onUpdatePriceItem: (index: number, updatedItem: PriceItem) => void;
-  onDeletePriceItem: (index: number) => void;
+  onAddPriceItem: (item: PriceItem) => Promise<boolean>;
+  onUpdatePriceItem: (index: number, updatedItem: PriceItem) => Promise<boolean>;
+  onDeletePriceItem: (index: number) => Promise<boolean>;
   salonServices: SalonService[];
-  onUpdateSalonService: (id: string, updated: Partial<SalonService>) => void;
-  onAddSalonService: (newService: SalonService) => void;
-  onDeleteSalonService: (id: string) => void;
-  onResetAllData: () => void;
+  onUpdateSalonService: (id: string, updated: Partial<SalonService>) => Promise<boolean>;
+  onAddSalonService: (newService: SalonService) => Promise<boolean>;
+  onDeleteSalonService: (id: string) => Promise<boolean>;
+  onImportCatalog: (data: Partial<Catalog>) => Promise<boolean>;
+  onResetAllData: () => Promise<boolean>;
+  /** Shows a catalog the server sent back (e.g. stock restored by cancelling an order). */
+  onCatalogChanged: (catalog: Catalog) => boolean;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -38,20 +89,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdateSalonService,
   onAddSalonService,
   onDeleteSalonService,
-  onResetAllData
+  onImportCatalog,
+  onResetAllData,
+  onCatalogChanged
 }) => {
-  // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('vip_admin_auth') === 'true';
-  });
+  // Authentication: the server decides. Nothing about the passcode lives in this code.
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
-  const [adminPin, setAdminPin] = useState<string>(() => {
-    return localStorage.getItem('vip_admin_pin') || '1234';
-  });
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Change-passcode form (Settings tab)
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
 
   // Active Admin Tab
-  const [activeTab, setActiveTab] = useState<'inventory' | 'services' | 'settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'orders' | 'bookings' | 'inventory' | 'services' | 'settings'>('orders');
+
+  // Orders & bookings received from customers
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [orderFilter, setOrderFilter] = useState<'open' | 'all' | OrderStatus>('open');
+  const [bookingFilter, setBookingFilter] = useState<'open' | 'all' | BookingStatus>('open');
 
   // Inventory Filters & Search
   const [productSearch, setProductSearch] = useState('');
@@ -120,27 +182,174 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  if (!isOpen) return null;
+  // Ask the server whether this browser already has a valid admin session.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setAuthChecked(false);
+    api
+      .adminSession()
+      .then((result) => !cancelled && setIsAuthenticated(result.authenticated))
+      .catch(() => !cancelled && setIsAuthenticated(false))
+      .finally(() => !cancelled && setAuthChecked(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
-  // PIN Authentication Handler
-  const handlePinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pinInput.trim() === adminPin || pinInput.trim() === 'vip2026' || pinInput.trim() === '1234') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('vip_admin_auth', 'true');
-      setPinError(false);
-      setPinInput('');
-      showToast('Успешен вход в административния панел');
-    } else {
-      setPinError(true);
+  // Any admin request answered with "not logged in" sends us back to the login screen.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setIsAuthenticated(false);
+      setPinError('Сесията е изтекла. Моля, влезте отново.');
+    };
+    window.addEventListener('vip-admin-unauthorized', onUnauthorized);
+    return () => window.removeEventListener('vip-admin-unauthorized', onUnauthorized);
+  }, []);
+
+  const loadInbox = async () => {
+    try {
+      const inbox = await api.adminInbox();
+      setOrders(inbox.orders);
+      setBookings(inbox.bookings);
+    } catch (err) {
+      if (err instanceof api.ApiError && err.status === 401) {
+        window.dispatchEvent(new Event('vip-admin-unauthorized'));
+      }
     }
   };
 
-  const handleLogout = () => {
+  // Keep the orders and bookings list fresh while the panel is open.
+  useEffect(() => {
+    if (!isOpen || !isAuthenticated) return;
+    loadInbox();
+    const timer = window.setInterval(loadInbox, INBOX_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [isOpen, isAuthenticated]);
+
+  if (!isOpen) return null;
+
+  const handleAdminError = (err: unknown) => {
+    if (err instanceof api.ApiError && err.status === 401) {
+      window.dispatchEvent(new Event('vip-admin-unauthorized'));
+      return;
+    }
+    alert(err instanceof Error ? err.message : 'Неуспешна операция. Опитайте отново.');
+  };
+
+  // Login
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLoggingIn || !pinInput) return;
+    setIsLoggingIn(true);
+    setPinError(null);
+    try {
+      await api.adminLogin(pinInput);
+      setIsAuthenticated(true);
+      setPinInput('');
+      showToast('Успешен вход в административния панел');
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : 'Неуспешен вход. Опитайте отново.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.adminLogout();
+    } catch {
+      /* the cookie expires on its own */
+    }
     setIsAuthenticated(false);
-    sessionStorage.removeItem('vip_admin_auth');
+    setOrders([]);
+    setBookings([]);
     onClose();
   };
+
+  const handleChangePin = async () => {
+    if (newPinInput !== confirmPinInput) {
+      alert('Новият код и потвърждението не съвпадат.');
+      return;
+    }
+    setIsChangingPin(true);
+    try {
+      await api.adminChangePin(currentPinInput, newPinInput);
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      showToast('Новият код беше запазен успешно!');
+    } catch (err) {
+      handleAdminError(err);
+    } finally {
+      setIsChangingPin(false);
+    }
+  };
+
+  // Orders & bookings
+  const handleOrderStatus = async (order: OrderRecord, status: OrderStatus) => {
+    if (status === order.status) return;
+    if (
+      status === 'cancelled' &&
+      !confirm('Отказването на поръчката връща артикулите в наличност и не може да бъде отменено. Продължавате ли?')
+    ) {
+      return;
+    }
+    try {
+      const result = await api.adminSetOrderStatus(order.id, status);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? result.order : o)));
+      onCatalogChanged(result.catalog);
+    } catch (err) {
+      handleAdminError(err);
+      loadInbox();
+    }
+  };
+
+  const handleDeleteOrder = async (order: OrderRecord) => {
+    if (!confirm(`Да изтрия ли поръчка ${order.id} окончателно?`)) return;
+    try {
+      await api.adminDeleteOrder(order.id);
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+    } catch (err) {
+      handleAdminError(err);
+    }
+  };
+
+  const handleBookingStatus = async (booking: BookingRecord, status: BookingStatus) => {
+    if (status === booking.status) return;
+    try {
+      const result = await api.adminSetBookingStatus(booking.id, status);
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? result.booking : b)));
+    } catch (err) {
+      handleAdminError(err);
+      loadInbox();
+    }
+  };
+
+  const handleDeleteBooking = async (booking: BookingRecord) => {
+    if (!confirm(`Да изтрия ли резервация ${booking.id} окончателно?`)) return;
+    try {
+      await api.adminDeleteBooking(booking.id);
+      setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+    } catch (err) {
+      handleAdminError(err);
+    }
+  };
+
+  const OPEN_ORDER = ['new', 'confirmed', 'shipped'];
+  const OPEN_BOOKING = ['new', 'confirmed'];
+  const newOrdersCount = orders.filter((o) => o.status === 'new').length;
+  const newBookingsCount = bookings.filter((b) => b.status === 'new').length;
+  const filteredOrders = orders.filter((o) =>
+    orderFilter === 'all' ? true : orderFilter === 'open' ? OPEN_ORDER.includes(o.status) : o.status === orderFilter
+  );
+  const filteredBookings = bookings.filter((b) =>
+    bookingFilter === 'all'
+      ? true
+      : bookingFilter === 'open'
+        ? OPEN_BOOKING.includes(b.status)
+        : b.status === bookingFilter
+  );
 
   // Filtered Products for Inventory table
   const filteredProducts = products.filter((p) => {
@@ -225,7 +434,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Save Product (Add or Update)
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productForm.title.trim()) {
       alert('Моля, въведете заглавие на продукта.');
@@ -248,7 +457,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         image: productForm.image || PRESET_PRODUCT_IMAGES[0].url,
         details: productForm.details.filter((d) => d.trim().length > 0)
       };
-      onUpdateProduct(updated);
+      if (!(await onUpdateProduct(updated))) return;
       showToast(`Продуктът "${updated.title}" е обновен!`);
     } else {
       const newProd: Product = {
@@ -264,7 +473,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         image: productForm.image || PRESET_PRODUCT_IMAGES[0].url,
         details: productForm.details.filter((d) => d.trim().length > 0)
       };
-      onAddProduct(newProd);
+      if (!(await onAddProduct(newProd))) return;
       showToast(`Новият продукт "${newProd.title}" е добавен в бутика!`);
     }
 
@@ -310,7 +519,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsPriceItemModalOpen(true);
   };
 
-  const handleSavePriceItem = (e: React.FormEvent) => {
+  const handleSavePriceItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!priceItemForm.service.trim() || !priceItemForm.price.trim()) {
       alert('Моля, попълнете наименование и цена на услугата.');
@@ -318,10 +527,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
 
     if (editingPriceIndex !== null) {
-      onUpdatePriceItem(editingPriceIndex, priceItemForm);
+      if (!(await onUpdatePriceItem(editingPriceIndex, priceItemForm))) return;
       showToast(`Услугата "${priceItemForm.service}" е обновена!`);
     } else {
-      onAddPriceItem({ ...priceItemForm, id: 'price-' + Date.now() });
+      if (!(await onAddPriceItem({ ...priceItemForm, id: 'price-' + Date.now() }))) return;
       showToast(`Новата услуга "${priceItemForm.service}" е добавена в ценоразписа!`);
     }
     setIsPriceItemModalOpen(false);
@@ -347,7 +556,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsSalonServiceModalOpen(true);
   };
 
-  const handleSaveSalonService = (e: React.FormEvent) => {
+  const handleSaveSalonService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!serviceCardForm.title.trim() || !serviceCardForm.startingPrice.trim()) {
       alert('Моля, въведете заглавие и начална цена.');
@@ -355,10 +564,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
 
     if (editingServiceCardId) {
-      onUpdateSalonService(editingServiceCardId, serviceCardForm);
+      if (!(await onUpdateSalonService(editingServiceCardId, serviceCardForm))) return;
       showToast(`Салонната карта "${serviceCardForm.title}" е обновена!`);
     } else {
-      onAddSalonService(serviceCardForm);
+      if (!(await onAddSalonService(serviceCardForm))) return;
       showToast(`Новата салонна услуга "${serviceCardForm.title}" е добавена!`);
     }
     setIsSalonServiceModalOpen(false);
@@ -383,18 +592,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.products && Array.isArray(parsed.products)) {
-          parsed.products.forEach((p: Product) => onUpdateProduct(p));
+        const data: Partial<Catalog> = {};
+        if (Array.isArray(parsed.products)) data.products = parsed.products;
+        if (Array.isArray(parsed.priceList)) data.priceList = parsed.priceList;
+        if (Array.isArray(parsed.salonServices)) data.salonServices = parsed.salonServices;
+        if (Object.keys(data).length === 0) {
+          alert('Файлът не съдържа данни за импорт.');
+        } else if (
+          confirm('Импортът ще замени текущите продукти, наличности и цени с тези от файла. Продължавате ли?')
+        ) {
+          if (await onImportCatalog(data)) showToast('Данните бяха импортирани успешно!');
         }
-        showToast('Данните бяха импортирани успешно!');
       } catch (err) {
         alert('Невалиден JSON файл.');
+      } finally {
+        input.value = '';
       }
     };
     reader.readAsText(file);
@@ -438,63 +657,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </p>
           </div>
 
-          <form onSubmit={handlePinSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 text-center">
-                Секретен ПИН код
-              </label>
-              <input
-                type="password"
-                maxLength={8}
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError(false);
-                }}
-                placeholder="••••"
-                autoFocus
-                className={`w-full bg-[#161616] border text-center text-2xl tracking-[0.4em] py-3 px-4 rounded-xl text-white font-mono focus:outline-none transition ${
-                  pinError
-                    ? 'border-red-500 focus:border-red-400 text-red-400'
-                    : 'border-[#D4AF37]/40 focus:border-[#D4AF37]'
-                }`}
-              />
-              {pinError && (
-                <p className="text-xs text-red-400 text-center mt-2 flex items-center justify-center gap-1.5">
-                  <i className="fa-solid fa-triangle-exclamation"></i>
-                  <span>Грешен ПИН код. Опитайте отново.</span>
-                </p>
-              )}
-            </div>
+          {!authChecked ? (
+            <p className="text-center text-xs text-gray-400">Проверка на сесията...</p>
+          ) : (
+            <form onSubmit={handlePinSubmit} className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 text-center">
+                  Секретен код
+                </label>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  maxLength={128}
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value);
+                    setPinError(null);
+                  }}
+                  placeholder="••••••••"
+                  autoFocus
+                  className={`w-full bg-[#161616] border text-center text-xl tracking-[0.3em] py-3 px-4 rounded-xl text-white font-mono focus:outline-none transition ${
+                    pinError
+                      ? 'border-red-500 focus:border-red-400 text-red-400'
+                      : 'border-[#D4AF37]/40 focus:border-[#D4AF37]'
+                  }`}
+                />
+                {pinError && (
+                  <p role="alert" className="text-xs text-red-400 text-center mt-2 flex items-center justify-center gap-1.5">
+                    <i className="fa-solid fa-triangle-exclamation"></i>
+                    <span>{pinError}</span>
+                  </p>
+                )}
+              </div>
 
-            <button
-              type="submit"
-              className="w-full gold-btn py-3 rounded-xl font-cinzel font-bold text-xs uppercase tracking-widest text-black shadow-lg"
-            >
-              Влез в Панела
-            </button>
+              <button
+                type="submit"
+                disabled={isLoggingIn || !pinInput}
+                className="w-full gold-btn py-3 rounded-xl font-cinzel font-bold text-xs uppercase tracking-widest text-black shadow-lg disabled:opacity-60"
+              >
+                {isLoggingIn ? 'Проверка...' : 'Влез в Панела'}
+              </button>
 
-            {/* Owner hint helper */}
-            <div className="p-3 bg-[#151515] border border-neutral-800 rounded-lg text-center text-[11px] text-gray-400">
-              <span className="text-[#E6CA65] font-semibold block mb-0.5">Информация за собственика:</span>
-              <span>Стандартен код за достъп: </span>
-              <button
-                type="button"
-                onClick={() => setPinInput('1234')}
-                className="font-mono text-white underline hover:text-[#E6CA65] font-bold"
-              >
-                1234
-              </button>
-              <span className="mx-1">или</span>
-              <button
-                type="button"
-                onClick={() => setPinInput('vip2026')}
-                className="font-mono text-white underline hover:text-[#E6CA65] font-bold"
-              >
-                vip2026
-              </button>
-            </div>
-          </form>
+              <p className="text-center text-[11px] text-gray-500">
+                Забравен код? Задава се на сървъра с командата <span className="font-mono">npm run set-pin</span>.
+              </p>
+            </form>
+          )}
         </div>
       ) : (
         /* MAIN AUTHENTICATED ADMIN PANEL */
@@ -526,7 +734,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-1.5 bg-[#171717] p-1 rounded-xl border border-neutral-800">
+            <div className="flex flex-wrap items-center gap-1.5 bg-[#171717] p-1 rounded-xl border border-neutral-800">
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === 'orders'
+                    ? 'bg-[#D4AF37] text-black font-semibold shadow'
+                    : 'text-gray-300 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <i className="fa-solid fa-bag-shopping text-xs"></i>
+                <span>Поръчки</span>
+                {newOrdersCount > 0 && (
+                  <span className="bg-rose-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                    {newOrdersCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('bookings')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === 'bookings'
+                    ? 'bg-[#D4AF37] text-black font-semibold shadow'
+                    : 'text-gray-300 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <i className="fa-regular fa-calendar-check text-xs"></i>
+                <span>Резервации</span>
+                {newBookingsCount > 0 && (
+                  <span className="bg-rose-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                    {newBookingsCount}
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => setActiveTab('inventory')}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
@@ -587,6 +829,238 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Panel Body Content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#0c0c0c]">
+            {/* ========================================================= */}
+            {/* TAB: ORDERS FROM THE ONLINE SHOP */}
+            {/* ========================================================= */}
+            {activeTab === 'orders' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-cinzel text-xl font-bold text-white">Поръчки от бутика</h2>
+                    <p className="text-xs text-gray-400 font-light">
+                      Новите поръчки се появяват тук автоматично (обновява се на всеки 30 секунди).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={orderFilter}
+                      onChange={(e) => setOrderFilter(e.target.value as 'open' | 'all' | OrderStatus)}
+                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                    >
+                      <option value="open">Активни</option>
+                      <option value="all">Всички</option>
+                      {(Object.keys(ORDER_STATUS_LABELS) as OrderStatus[]).map((st) => (
+                        <option key={st} value={st}>
+                          {ORDER_STATUS_LABELS[st]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={loadInbox}
+                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-gray-200 text-xs border border-neutral-700"
+                    >
+                      Обнови
+                    </button>
+                  </div>
+                </div>
+
+                {filteredOrders.length === 0 ? (
+                  <div className="bg-[#121212] border border-neutral-800 rounded-xl p-10 text-center text-sm text-gray-400">
+                    Няма поръчки в този изглед.
+                  </div>
+                ) : (
+                  filteredOrders.map((order) => (
+                    <div key={order.id} className="bg-[#121212] border border-neutral-800 rounded-xl p-4 sm:p-5 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold text-[#E6CA65] text-sm">{order.id}</span>
+                          <span className="text-[11px] text-gray-400">{formatDateTime(order.createdAt)}</span>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${
+                              STATUS_BADGE[order.status] || ''
+                            }`}
+                          >
+                            {ORDER_STATUS_LABELS[order.status]}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={order.status}
+                            onChange={(e) => handleOrderStatus(order, e.target.value as OrderStatus)}
+                            disabled={order.status === 'cancelled'}
+                            className="bg-[#181818] border border-neutral-700 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37] disabled:opacity-50"
+                          >
+                            {(Object.keys(ORDER_STATUS_LABELS) as OrderStatus[]).map((st) => (
+                              <option key={st} value={st}>
+                                {ORDER_STATUS_LABELS[st]}
+                              </option>
+                            ))}
+                          </select>
+                          {(order.status === 'completed' || order.status === 'cancelled') && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(order)}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900 text-rose-300 text-xs border border-rose-800/60"
+                              title="Изтрий поръчката"
+                            >
+                              <i className="fa-solid fa-trash-can"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div className="space-y-1.5 text-gray-300">
+                          <div className="text-white font-semibold text-sm">{order.customer.name}</div>
+                          <div>
+                            <i className="fa-solid fa-phone text-[#E6CA65] mr-2"></i>
+                            <a href={`tel:${order.customer.phone}`} className="text-white underline">
+                              {order.customer.phone}
+                            </a>
+                          </div>
+                          {order.customer.email && (
+                            <div>
+                              <i className="fa-solid fa-envelope text-[#E6CA65] mr-2"></i>
+                              <a href={`mailto:${order.customer.email}`} className="text-white underline">
+                                {order.customer.email}
+                              </a>
+                            </div>
+                          )}
+                          <div>
+                            <i className="fa-solid fa-truck-fast text-[#E6CA65] mr-2"></i>
+                            {COURIER_LABELS[order.courier] || order.courier} · {order.customer.city}, {order.customer.address}
+                          </div>
+                          {order.customer.notes && (
+                            <div className="text-gray-400 italic">„{order.customer.notes}“</div>
+                          )}
+                        </div>
+
+                        <div className="bg-[#181818] rounded-lg p-3 space-y-1.5 text-gray-300">
+                          {order.items.map((item) => (
+                            <div key={item.productId} className="flex justify-between gap-3">
+                              <span className="text-white">
+                                {item.quantity} × {item.title}
+                              </span>
+                              <span className="tabular-nums">{Math.round(item.price * item.quantity * 100) / 100} лв.</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between border-t border-neutral-700 pt-1.5 text-gray-400">
+                            <span>Доставка</span>
+                            <span className="tabular-nums">{order.shipping === 0 ? 'безплатна' : `${order.shipping} лв.`}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold text-white">
+                            <span>Общо (наложен платеж)</span>
+                            <span className="font-cinzel text-[#E6CA65] tabular-nums">{order.total} лв.</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* TAB: BOOKINGS FROM THE ONLINE FORM */}
+            {/* ========================================================= */}
+            {activeTab === 'bookings' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-cinzel text-xl font-bold text-white">Резервации за часове</h2>
+                    <p className="text-xs text-gray-400 font-light">
+                      Свържете се с клиента, за да потвърдите часа, после сменете статуса на „Потвърдена“.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={bookingFilter}
+                      onChange={(e) => setBookingFilter(e.target.value as 'open' | 'all' | BookingStatus)}
+                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                    >
+                      <option value="open">Активни</option>
+                      <option value="all">Всички</option>
+                      {(Object.keys(BOOKING_STATUS_LABELS) as BookingStatus[]).map((st) => (
+                        <option key={st} value={st}>
+                          {BOOKING_STATUS_LABELS[st]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={loadInbox}
+                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-gray-200 text-xs border border-neutral-700"
+                    >
+                      Обнови
+                    </button>
+                  </div>
+                </div>
+
+                {filteredBookings.length === 0 ? (
+                  <div className="bg-[#121212] border border-neutral-800 rounded-xl p-10 text-center text-sm text-gray-400">
+                    Няма резервации в този изглед.
+                  </div>
+                ) : (
+                  filteredBookings.map((booking) => (
+                    <div key={booking.id} className="bg-[#121212] border border-neutral-800 rounded-xl p-4 sm:p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1.5 text-xs text-gray-300">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="font-mono font-bold text-[#E6CA65] text-sm">{booking.id}</span>
+                            <span className="text-[11px] text-gray-400">подадена {formatDateTime(booking.createdAt)}</span>
+                            <span
+                              className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${
+                                STATUS_BADGE[booking.status] || ''
+                              }`}
+                            >
+                              {BOOKING_STATUS_LABELS[booking.status]}
+                            </span>
+                          </div>
+                          <div className="text-white font-semibold text-sm">
+                            {booking.date} в {booking.time} ч. · {booking.service}
+                          </div>
+                          <div>Стилист: {booking.stylistName}</div>
+                          <div>
+                            <span className="text-white">{booking.name}</span> ·{' '}
+                            <i className="fa-solid fa-phone text-[#E6CA65] mx-1"></i>
+                            <a href={`tel:${booking.phone}`} className="text-white underline">
+                              {booking.phone}
+                            </a>
+                          </div>
+                          {booking.notes && <div className="text-gray-400 italic">„{booking.notes}“</div>}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={booking.status}
+                            onChange={(e) => handleBookingStatus(booking, e.target.value as BookingStatus)}
+                            className="bg-[#181818] border border-neutral-700 rounded-lg py-1.5 px-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                          >
+                            {(Object.keys(BOOKING_STATUS_LABELS) as BookingStatus[]).map((st) => (
+                              <option key={st} value={st}>
+                                {BOOKING_STATUS_LABELS[st]}
+                              </option>
+                            ))}
+                          </select>
+                          {['done', 'cancelled', 'no_show'].includes(booking.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBooking(booking)}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900 text-rose-300 text-xs border border-rose-800/60"
+                              title="Изтрий резервацията"
+                            >
+                              <i className="fa-solid fa-trash-can"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
             {/* ========================================================= */}
             {/* TAB 1: INVENTORY & PRODUCTS MANAGEMENT */}
             {/* ========================================================= */}
@@ -1050,35 +1524,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {activeTab === 'settings' && (
               <div className="max-w-3xl space-y-6">
                 
-                {/* PIN Code Setting */}
+                {/* Admin passcode */}
                 <div className="bg-[#121212] border border-neutral-800 rounded-xl p-5 shadow-xl">
                   <h3 className="font-cinzel text-base font-bold text-white mb-2 flex items-center gap-2">
                     <i className="fa-solid fa-key text-[#E6CA65]"></i>
-                    <span>Административен ПИН код</span>
+                    <span>Код за достъп до панела</span>
                   </h3>
                   <p className="text-xs text-gray-400 mb-4 font-light">
-                    Можете да промените кода за защита на този административен панел.
+                    Кодът се пази само на сървъра (криптиран) и не се вижда никъде в сайта. Използвайте поне 8
+                    символа. След смяна всички други влезли сесии се затварят.
                   </p>
 
-                  <div className="flex items-center gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                     <input
-                      type="text"
-                      maxLength={8}
-                      value={adminPin}
-                      onChange={(e) => setAdminPin(e.target.value)}
-                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white font-mono tracking-widest w-36 focus:outline-none focus:border-[#D4AF37]"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Текущ код"
+                      value={currentPinInput}
+                      onChange={(e) => setCurrentPinInput(e.target.value)}
+                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        localStorage.setItem('vip_admin_pin', adminPin);
-                        showToast('Новият ПИН код беше запазен успешно!');
-                      }}
-                      className="gold-btn px-4 py-2 rounded-lg text-xs font-semibold text-black"
-                    >
-                      Запази нов ПИН
-                    </button>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Нов код (мин. 8 символа)"
+                      value={newPinInput}
+                      onChange={(e) => setNewPinInput(e.target.value)}
+                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                    />
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Повторете новия код"
+                      value={confirmPinInput}
+                      onChange={(e) => setConfirmPinInput(e.target.value)}
+                      className="bg-[#181818] border border-neutral-700 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                    />
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleChangePin}
+                    disabled={isChangingPin || !currentPinInput || !newPinInput}
+                    className="gold-btn px-4 py-2 rounded-lg text-xs font-semibold text-black disabled:opacity-60"
+                  >
+                    {isChangingPin ? 'Запазване...' : 'Запази нов код'}
+                  </button>
                 </div>
 
                 {/* Backup & Restore */}
@@ -1126,10 +1616,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm('ВНИМАНИЕ: Това ще възстанови оригиналния фабричен списък с продукти и услуги. Продължавате ли?')) {
-                        onResetAllData();
-                        showToast('Данните бяха възстановени до първоначалните!');
+                        if (await onResetAllData()) showToast('Данните бяха възстановени до първоначалните!');
                       }
                     }}
                     className="px-4 py-2 rounded-lg bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-medium transition border border-rose-800/60 cursor-pointer"
