@@ -1,123 +1,90 @@
-# VIP Beauty House — Luxury Hair Extensions & Salon Experience
+# VIP Beauty House — Luxury Hair Extensions & Salon
 
-[![Deploy to GitHub Pages](https://github.com/ge6a-2222/vip-beauty-house/actions/workflows/deploy.yml/badge.svg)](https://github.com/ge6a-2222/vip-beauty-house/actions/workflows/deploy.yml)
-[![Built with React 19 & Vite](https://img.shields.io/badge/Stack-React%2019%20%2B%20Vite%208-D4AF37.svg)](https://vitejs.dev/)
-[![Tailwind CSS v4](https://img.shields.io/badge/CSS-Tailwind%20v4-38bdf8.svg)](https://tailwindcss.com/)
+Website, online boutique and booking system for **VIP Beauty House** (Varna, Bulgaria): premium Slavic hair extensions, AirTouch & balayage, hair care products.
 
-A modern, high-conversion web platform and boutique for **VIP Beauty House** (Varna, Bulgaria) — specialized in premium Slavic hair extensions, AirTouch & balayage coloring, luxury hair care, and client aesthetics.
+The site is a React 19 + Vite + Tailwind 4 front end served by a small Node.js server (`server/`, no extra packages). The server is the single source of truth for products, stock, orders, bookings and stylists, so every visitor sees the same data and the owner receives every order and booking.
 
----
+> **GitHub Pages is not enough any more.** Pages only hosts static files, but the shop, bookings and admin login need the Node server. Run the server on your own machine (see below).
 
-## 🌟 Highlights for Client Presentation
+## Features
 
-- **Luxury Brand Aesthetics**: Custom Dark & Gold styling (`#D4AF37`), Cinzel serif typography, smooth animations, and mobile-optimized luxury layout.
-- **Online Boutique & Shop**:
-  - 100% natural Slavic hair extensions (wefts, tape-in, keratin bonds), salon cosmetics, and styling tools.
-  - Interactive shopping cart slide-over with real-time stock deduction and validation.
-  - Fast checkout modal with delivery selection (Econt / Speedy) and cash-on-delivery or card payment.
-- **Interactive Salon Services & Price Table**:
-  - Categorized service cards with starting prices and detailed consultation info.
-  - Searchable salon price list with instant filtering and direct booking links.
-- **Online Appointment Booking**:
-  - Direct date & time picker, stylist selection, and automated reservation confirmation code generator.
-- **Transformations Gallery & Hair Models**:
-  - Before/After transformations, hair texture showcases, and client reviews.
-- **Hidden Admin Panel (Owner's Portal)**:
-  - Accessible discreetly via `Ctrl + Shift + A` (or `Cmd + Shift + A`) or `#admin` URL hash.
-  - Protected with a PIN passcode (`1234` or `vip2026`).
-  - **Stock Management**: Real-time counters (total, in-stock, low stock, out of stock) with `[-]` and `[+]` quick stock stepper.
-  - **Add Products with Photos**: File upload from computer with automatic client-side photo compression, salon photo presets, or custom image URLs.
-  - **Services Editor**: Add and edit salon service names, prices, durations, and spotlight highlights.
-  - **Data Backup & Restore**: Export/Import full catalog state as JSON.
+- **Shop:** cart, stock checked on the server (two customers can never buy the last item), cash on delivery with Econt / Speedy, free delivery over a threshold.
+- **Booking:** customer picks service, stylist (dropdown), date, time and leaves name, phone and **email**.
+- **Owner's admin panel** (`/#admin` or `Ctrl/Cmd + Shift + A`):
+  - **Orders** and **Bookings** inbox with status changes; new items show a counter and can also be pushed to your phone (Telegram, ntfy, Discord or Slack).
+  - **Bookings calendar:** month view; pending requests are amber, accepted ones green. Press **Приеми** (accept) or **Откажи** (decline). Accepting sends the customer a confirmation email; declining frees the slot and sends nothing.
+  - **Stock & shop:** add products with photos, quick stock +/−, prices.
+  - **Services & prices**, and **Team** (add, edit, remove stylists; the booking form follows immediately).
+  - **Settings:** change the passcode, export / import a JSON backup.
 
----
+## Requirements
 
-## 🚀 How to Publish & View via GitHub Pages
+Node.js 22 or newer.
 
-This repository is already pre-configured with a zero-setup **GitHub Actions deployment workflow** (`.github/workflows/deploy.yml`) specifically built for GitHub Pages.
-
-### Step 1: Create a Repository on GitHub
-If you haven't already created a repository:
-1. Go to [GitHub](https://github.com/) and click **New repository** (e.g. `vip-beauty-house`).
-2. Keep it Public (or Private with GitHub Pro).
-
-### Step 2: Push the Code
-In your project directory:
-```bash
-git init
-git add .
-git commit -m "Initial commit: VIP Beauty House luxury salon & boutique"
-git branch -M main
-git remote add origin https://github.com/<YOUR-USERNAME>/<YOUR-REPO-NAME>.git
-git push -u origin main
-```
-
-### Step 3: Enable GitHub Pages (One-Click)
-1. On GitHub, navigate to your repository's **Settings** tab.
-2. In the left sidebar, click on **Pages** (under the "Code and automation" section).
-3. Under **Build and deployment** > **Source**, change the dropdown from *Deploy from a branch* to:
-   👉 **GitHub Actions**
-4. That's it! GitHub Actions will immediately pick up `.github/workflows/deploy.yml`.
-
-### Step 4: View the Published Site
-1. Click the **Actions** tab in your repository to watch the deployment run (typically takes ~35 seconds).
-2. Once complete, your live site URL will be:
-   ```
-   https://<YOUR-USERNAME>.github.io/<YOUR-REPO-NAME>/
-   ```
-3. Send this link directly to your client! The site loads with all images, stylesheets, shopping cart, booking form, and hidden admin panel functioning seamlessly.
-
-> **💡 Troubleshooting "Blank White Page":**
-> If you ever see a blank white page on GitHub Pages, check your repository **Settings > Pages > Source**:
-> - **Must be set to "GitHub Actions"**, NOT *"Deploy from a branch > main / root"*. (Browsers cannot execute raw TypeScript/JSX from the uncompiled source branch; the automated GitHub Actions workflow compiles the app and publishes the production `dist/` bundle).
-> - **Alternative 1-Command Deploy (`gh-pages`)**: If you prefer deploying from your terminal without GitHub Actions, simply run:
->   ```bash
->   npm run deploy
->   ```
->   Then in **Settings > Pages**, choose **Deploy from a branch** > branch **gh-pages** > folder **/ (root)**.
-
----
-
-## 💻 Local Development
-
-To run the project locally on your machine:
+## Install and run
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Start local dev server (port 3000)
-npm run dev
-
-# 3. Build production bundle (tests the build)
-npm run build
-
-# 4. Preview production build locally
-npm run preview
+npm run build        # builds the website into dist/
+cp .env.example .env # then edit .env (everything is optional)
+npm start            # serves the site and the API on http://127.0.0.1:8080
 ```
 
----
+On the very first start the server creates the admin passcode: from `ADMIN_PASSWORD` in `.env`, or a random one printed once in the console. It is stored hashed and never appears in the website's code. Change it later in the admin panel (Settings) or with `npm run set-pin`.
 
-## 🔐 How to Open the Hidden Admin Panel
+For development with live reload run `npm run dev` (front end only; start `npm start` as well and proxy `/api` to it if you need the API).
 
-To show the client the administrative capabilities:
-1. Press `Ctrl + Shift + A` (or `Cmd + Shift + A` on Mac) anywhere on the live page, or visit `https://<YOUR-PAGES-URL>/#admin`.
-2. Alternatively, click the subtle **Администрация** lock link in the footer copyright line.
-3. Enter PIN: `1234` or `vip2026`.
-4. Demonstrate adding products, attaching photos, updating stock counters, and editing salon prices live!
+## Settings (`.env`)
 
----
+The full list with comments is in `.env.example`. The file stays on the server and is never committed.
 
-## 🛠️ Tech Stack & Architecture
+| Setting | Purpose |
+|---|---|
+| `PORT`, `HOST` | where the server listens (keep `HOST=127.0.0.1` behind a reverse proxy) |
+| `TRUST_PROXY=1` | set when behind nginx / Caddy so limits use the visitor's real IP |
+| `ADMIN_PASSWORD` | first-start admin passcode (min. 8 characters) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFY_WEBHOOK_URL` | phone alerts for new orders and bookings |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | confirmation emails (see next section) |
+| `SALON_ADDRESS`, `SALON_PHONE` | printed at the bottom of the confirmation email |
+| `SHIPPING_FEE`, `FREE_SHIPPING_OVER` | delivery pricing (lv.) |
+| `BOOKING_OPEN`, `BOOKING_CLOSE` | bookings are only accepted between these times |
+| `DATA_DIR`, `DIST_DIR` | where data is stored / which built site is served |
 
-- **Framework**: React 19 + TypeScript
-- **Bundler**: Vite 8 with ESM configuration
-- **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`)
-- **Icons**: Font Awesome 6.5 + Lucide React
-- **Animations**: Motion (Framer Motion v12)
-- **Deployment**: GitHub Pages via GitHub Actions (`actions/deploy-pages@v4`)
-- **SPA Routing Support**: Fallback redirect via `404.html` and `sessionStorage` recovery
+Restart the server after editing `.env`.
 
----
+## Confirmation emails (Gmail example)
+
+1. In the Gmail account the emails should come from, turn on **2-Step Verification** (myaccount.google.com → Security).
+2. Open myaccount.google.com/apppasswords, create an app password and copy the 16 characters (spaces are ignored).
+3. In `.env` set:
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=yourname@gmail.com
+   SMTP_PASS=your16characterapppassword
+   SMTP_FROM=yourname@gmail.com
+   ```
+4. Restart. The start-up message says `confirmation emails: on`.
+5. Make a test booking with your own address and press Accept. If sending fails, the booking stays accepted, the panel shows the reason and a **Изпрати отново** (resend) button.
+
+Port 587 uses STARTTLS and 465 uses TLS from the start; the password is never sent unencrypted. Some internet providers block outgoing mail ports, so try 465 if 587 fails. Without SMTP settings the panel says emails are switched off.
+
+## Running it at home
+
+- Put a reverse proxy (Caddy or nginx) in front for HTTPS, and set `TRUST_PROXY=1`.
+- Back up the `data/` folder (it holds `store.json`, uploaded photos and the hashed passcode). The admin panel can also export a JSON backup of the catalog.
+- Keep the machine and Node.js updated, since it is reachable from the internet.
+
+## Tests
+
+```bash
+npm test             # server tests, including a fake mail server
+```
+
+## Project layout
+
+- `src/` — React front end (`components/AdminPanel.tsx`, `components/BookingCalendar.tsx`, `api.ts`, …)
+- `server/` — Node server: `app.mjs` (routes), `store.mjs` (JSON database), `auth.mjs`, `mailer.mjs` (SMTP), `notify.mjs` (phone alerts), `*.test.mjs`
+- `public/` — static files copied into the build
 
 © 2026 VIP Beauty House. All rights reserved.

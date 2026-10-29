@@ -787,6 +787,7 @@ export async function createApp(config, deps = {}) {
     auth,
     config,
     notifier,
+    mailer,
     listen: (port = config.port, host = config.host) =>
       new Promise((resolve, reject) => {
         server.once('error', reject);

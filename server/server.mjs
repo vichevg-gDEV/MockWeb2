@@ -23,6 +23,12 @@ console.log(
     : '  notifications: none configured (orders and bookings appear in the admin panel only)'
 );
 
+console.log(
+  app.mailer.enabled
+    ? `  confirmation emails: on (sent from ${config.smtp.from || config.smtp.user})`
+    : '  confirmation emails: off (set SMTP_HOST, SMTP_USER and SMTP_PASS in .env to turn them on)'
+);
+
 let stopping = false;
 async function shutdown(signal) {
   if (stopping) return;
