@@ -205,5 +205,23 @@ export function parseSalonServices(raw) {
   });
 }
 
+export function parseStylists(raw) {
+  if (!Array.isArray(raw) || raw.length > 30) throw bad('Невалиден списък със стилисти.');
+  const seen = new Set();
+  return raw.map((item) => {
+    if (!item || typeof item !== 'object') throw bad('Невалиден стилист.');
+    let id = str(item.id, 'id', { max: 80 });
+    // 'any' is reserved for "first available stylist"; duplicates get a fresh id.
+    if (!id || id === 'any' || seen.has(id)) id = `st-${crypto.randomBytes(4).toString('hex')}`;
+    seen.add(id);
+    return {
+      id,
+      name: str(item.name, 'име', { required: true, max: 100 }),
+      role: str(item.role, 'длъжност', { max: 150 }),
+      experience: str(item.experience, 'опит', { max: 150 })
+    };
+  });
+}
+
 export const ORDER_STATUSES = ['new', 'confirmed', 'shipped', 'completed', 'cancelled'];
 export const BOOKING_STATUSES = ['new', 'confirmed', 'done', 'no_show', 'cancelled'];

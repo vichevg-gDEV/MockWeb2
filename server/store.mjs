@@ -10,6 +10,9 @@ import path from 'node:path';
  *   (temp file + rename, previous copy kept as store.json.bak) and rolled back if the
  *   write fails.
  */
+/** The virtual 'any' option is handled in code and never stored. */
+export const seedStylists = (seed) => structuredClone(seed.stylists.filter((x) => x.id !== 'any'));
+
 export async function openStore({ dataDir, seed }) {
   await fsp.mkdir(dataDir, { recursive: true, mode: 0o700 });
   const file = path.join(dataDir, 'store.json');
@@ -25,13 +28,19 @@ export async function openStore({ dataDir, seed }) {
       );
     }
   }
+  // Stores written before stylists became editable get the default team.
+  if (state && !Array.isArray(state.catalog.stylists)) {
+    state.catalog.stylists = seedStylists(seed);
+    await writeToDisk();
+  }
   if (!state) {
     state = {
       version: 1,
       catalog: {
         products: structuredClone(seed.products),
         priceList: structuredClone(seed.priceList),
-        salonServices: structuredClone(seed.salonServices)
+        salonServices: structuredClone(seed.salonServices),
+        stylists: seedStylists(seed)
       },
       orders: [],
       bookings: [],

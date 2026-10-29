@@ -5,7 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { createAuth, createLimiter, checkPasscodeStrength } from './auth.mjs';
-import { openStore } from './store.mjs';
+import { openStore, seedStylists } from './store.mjs';
 import { createNotifier, formatOrder, formatBooking } from './notify.mjs';
 import {
   HttpError,
@@ -15,6 +15,7 @@ import {
   parseBookingInput,
   parseOrderInput,
   parsePriceList,
+  parseStylists,
   parseProductInput,
   parseSalonServices
 } from './validate.mjs';
@@ -533,6 +534,15 @@ export async function createApp(config) {
       return send(res, 200, catalogResponse());
     }
 
+    if (pathname === '/api/admin/stylists' && method === 'PUT') {
+      const body = await readJson(req, 64 * 1024);
+      const items = parseStylists(body.items);
+      await store.transaction((state) => {
+        state.catalog.stylists = items;
+      });
+      return send(res, 200, catalogResponse());
+    }
+
     if (pathname === '/api/admin/catalog/import' && method === 'POST') {
       const body = await readJson(req, 40 * 1024 * 1024);
       const next = {};
@@ -551,6 +561,7 @@ export async function createApp(config) {
       }
       if (body.priceList !== undefined) next.priceList = parsePriceList(body.priceList);
       if (body.salonServices !== undefined) next.salonServices = parseSalonServices(body.salonServices);
+      if (body.stylists !== undefined) next.stylists = parseStylists(body.stylists);
       if (Object.keys(next).length === 0) throw new HttpError(400, 'invalid_input', 'Файлът не съдържа данни за импорт.');
       await store.transaction((state) => {
         Object.assign(state.catalog, next);
@@ -563,7 +574,8 @@ export async function createApp(config) {
         state.catalog = {
           products: structuredClone(seed.products),
           priceList: structuredClone(seed.priceList),
-          salonServices: structuredClone(seed.salonServices)
+          salonServices: structuredClone(seed.salonServices),
+          stylists: seedStylists(seed)
         };
       });
       return send(res, 200, catalogResponse());

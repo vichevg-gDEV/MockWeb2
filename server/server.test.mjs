@@ -196,6 +196,71 @@ describe('bookings', () => {
   });
 });
 
+describe('stylists', () => {
+  const stylist = (extra = {}) => ({ name: 'Нина Колева', role: 'Колорист', experience: '5 години', ...extra });
+
+  test('catalog exposes real stylists and never the virtual "any"', async () => {
+    const s = await startApp();
+    const { json } = await s.req('GET', '/api/catalog');
+    assert.ok(json.stylists.some((x) => x.id === 'silvia'));
+    assert.ok(!json.stylists.some((x) => x.id === 'any'));
+  });
+
+  test('admin can add, rename and remove stylists; the public catalog follows', async () => {
+    const s = await startApp();
+    const { cookie } = await s.login();
+    const list = (await s.req('GET', '/api/catalog')).json.stylists;
+    const items = [{ ...list[0], name: 'Преименувана' }, stylist()];
+    const res = await s.req('PUT', '/api/admin/stylists', { items }, { cookie });
+    assert.equal(res.status, 200);
+    const after = (await s.req('GET', '/api/catalog')).json.stylists;
+    assert.equal(after.length, 2);
+    assert.equal(after[0].id, list[0].id);
+    assert.equal(after[0].name, 'Преименувана');
+    assert.match(after[1].id, /^st-[0-9a-f]{8}$/);
+    const empty = await s.req('PUT', '/api/admin/stylists', { items: [] }, { cookie });
+    assert.equal(empty.status, 200);
+    assert.deepEqual((await s.req('GET', '/api/catalog')).json.stylists, []);
+  });
+
+  test('rejects invalid stylist lists and needs a login', async () => {
+    const s = await startApp();
+    const { cookie } = await s.login();
+    const put = (items) => s.req('PUT', '/api/admin/stylists', { items }, { cookie });
+    assert.equal((await put([stylist({ name: '' })])).status, 400);
+    assert.equal((await put([stylist({ name: 'x'.repeat(101) })])).status, 400);
+    assert.equal((await put(Array.from({ length: 31 }, () => stylist()))).status, 400);
+    assert.equal((await put('nope')).status, 400);
+    assert.equal((await s.req('PUT', '/api/admin/stylists', { items: [stylist()] })).status, 401);
+  });
+
+  test('a store written before stylists existed still loads with the seed stylists', async () => {
+    const first = await startApp();
+    const dir = first.dataDir;
+    await first.close();
+    const file = path.join(dir, 'store.json');
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    delete state.catalog.stylists;
+    fs.writeFileSync(file, JSON.stringify(state));
+    const second = await startApp({}, dir);
+    const { json } = await second.req('GET', '/api/catalog');
+    assert.ok(json.stylists.some((x) => x.id === 'silvia'));
+  });
+
+  test('reset restores the seed stylists and export/import round-trips them', async () => {
+    const s = await startApp();
+    const { cookie } = await s.login();
+    await s.req('PUT', '/api/admin/stylists', { items: [stylist()] }, { cookie });
+    const exported = (await s.req('GET', '/api/catalog')).json;
+    assert.equal(exported.stylists.length, 1);
+    await s.req('POST', '/api/admin/catalog/reset', {}, { cookie });
+    assert.ok((await s.req('GET', '/api/catalog')).json.stylists.some((x) => x.id === 'silvia'));
+    const imported = await s.req('POST', '/api/admin/catalog/import', { stylists: exported.stylists }, { cookie });
+    assert.equal(imported.status, 200);
+    assert.equal((await s.req('GET', '/api/catalog')).json.stylists.length, 1);
+  });
+});
+
 describe('admin authentication', () => {
   test('admin endpoints require a login', async () => {
     const s = await startApp();
