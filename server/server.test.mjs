@@ -13,7 +13,7 @@ after(async () => {
   for (const fn of cleanups) await fn();
 });
 
-async function startApp(overrides = {}, dir = null) {
+async function startApp(overrides = {}, dir = null, deps = {}) {
   const dataDir = dir || fs.mkdtempSync(path.join(os.tmpdir(), 'vip-test-'));
   const config = loadConfig(
     {},
@@ -26,7 +26,7 @@ async function startApp(overrides = {}, dir = null) {
       ...overrides
     }
   );
-  const app = await createApp(config);
+  const app = await createApp(config, deps);
   const address = await app.listen(0, '127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
 
@@ -290,6 +290,126 @@ describe('booking email and stylists', () => {
     assert.equal((await s.req('POST', '/api/bookings', booking({ stylist: id, time: '13:00' }))).status, 400);
     const inbox = (await s.req('GET', '/api/admin/inbox', undefined, { cookie })).json;
     assert.equal(inbox.bookings[0].stylistName, 'Нина Колева', 'old booking keeps the stylist name');
+  });
+});
+
+describe('accepting a booking sends the confirmation email', () => {
+  const stubMailer = ({ enabled = true, fail = null } = {}) => {
+    const sent = [];
+    return {
+      enabled,
+      sent,
+      async send(message) {
+        sent.push(message);
+        if (fail) throw new Error(fail);
+      }
+    };
+  };
+  async function setup(mailer, bookingExtra = {}) {
+    const s = await startApp({}, null, { mailer });
+    const { cookie } = await s.login();
+    const created = await s.req('POST', '/api/bookings', booking({ stylist: 'any', ...bookingExtra }));
+    const id = created.json.booking.id;
+    const patch = (status) => s.req('PATCH', `/api/admin/bookings/${id}`, { status }, { cookie });
+    const resend = () => s.req('POST', `/api/admin/bookings/${id}/email`, {}, { cookie });
+    return { s, cookie, id, patch, resend };
+  }
+
+  test('new -> confirmed sends exactly one email to the customer and records it', async () => {
+    const mailer = stubMailer();
+    const { patch } = await setup(mailer);
+    const res = await patch('confirmed');
+    assert.equal(res.status, 200);
+    assert.equal(res.json.email, 'sent');
+    assert.equal(res.json.booking.status, 'confirmed');
+    assert.ok(res.json.booking.emailSentAt);
+    assert.equal(mailer.sent.length, 1);
+    assert.equal(mailer.sent[0].to, 'mila@example.com');
+    assert.match(mailer.sent[0].text, /Мила Иванова/);
+    assert.match(mailer.sent[0].subject, /резервация/i);
+  });
+
+  test('declining sends nothing; repeating confirmed does not send again', async () => {
+    const mailer = stubMailer();
+    const a = await setup(mailer);
+    const declined = await a.patch('cancelled');
+    assert.equal(declined.json.email, null);
+    assert.equal(mailer.sent.length, 0);
+    const b = await setup(mailer, { time: '12:00' });
+    await b.patch('confirmed');
+    const again = await b.patch('confirmed');
+    assert.equal(again.json.email, null);
+    assert.equal(mailer.sent.length, 1);
+    await b.patch('done');
+    assert.equal(mailer.sent.length, 1, 'moving on to done sends nothing');
+  });
+
+  test('a failing mail server never undoes Accept, and the reason is kept without secrets', async () => {
+    const mailer = stubMailer({ fail: 'Пощенският сървър отказа входа (535).' });
+    const { patch, s, cookie } = await setup(mailer);
+    const res = await patch('confirmed');
+    assert.equal(res.json.email, 'failed');
+    assert.equal(res.json.booking.status, 'confirmed');
+    assert.match(res.json.booking.emailError, /535/);
+    assert.equal(res.json.booking.emailSentAt, undefined);
+    const inbox = (await s.req('GET', '/api/admin/inbox', undefined, { cookie })).json;
+    assert.equal(inbox.bookings[0].status, 'confirmed');
+  });
+
+  test('switched-off mail and bookings without an address are reported, not failed', async () => {
+    const off = await setup(stubMailer({ enabled: false }));
+    const res = await off.patch('confirmed');
+    assert.equal(res.json.email, 'disabled');
+    assert.equal(res.json.booking.status, 'confirmed');
+
+    const first = await startApp();
+    await first.req('POST', '/api/bookings', booking({ stylist: 'any' }));
+    const dir = first.dataDir;
+    await first.close();
+    const file = path.join(dir, 'store.json');
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    delete state.bookings[0].email;
+    fs.writeFileSync(file, JSON.stringify(state));
+    const mailer = stubMailer();
+    const s = await startApp({}, dir, { mailer });
+    const { cookie } = await s.login();
+    const legacy = await s.req('PATCH', `/api/admin/bookings/${state.bookings[0].id}`, { status: 'confirmed' }, { cookie });
+    assert.equal(legacy.json.email, 'no_address');
+    assert.equal(mailer.sent.length, 0);
+  });
+
+  test('resend works only for confirmed bookings and clears an earlier failure', async () => {
+    let failNext = true;
+    const mailer = stubMailer();
+    mailer.send = async (m) => {
+      mailer.sent.push(m);
+      if (failNext) throw new Error('timeout');
+    };
+    const { patch, resend } = await setup(mailer);
+    assert.equal((await resend()).status, 409, 'new booking cannot be resent');
+    assert.equal((await patch('confirmed')).json.email, 'failed');
+    failNext = false;
+    const res = await resend();
+    assert.equal(res.status, 200);
+    assert.equal(res.json.email, 'sent');
+    assert.equal(res.json.booking.emailError, undefined);
+    assert.ok(res.json.booking.emailSentAt);
+    assert.equal(mailer.sent.length, 2);
+  });
+
+  test('the inbox tells the panel whether email is switched on', async () => {
+    const on = await startApp({}, null, { mailer: stubMailer() });
+    const off = await startApp({}, null, { mailer: stubMailer({ enabled: false }) });
+    for (const [s, expected] of [[on, true], [off, false]]) {
+      const { cookie } = await s.login();
+      assert.equal((await s.req('GET', '/api/admin/inbox', undefined, { cookie })).json.emailEnabled, expected);
+    }
+  });
+
+  test('resend needs a login and a real booking', async () => {
+    const { s, cookie } = await setup(stubMailer());
+    assert.equal((await s.req('POST', '/api/admin/bookings/VIP-RES-1/email', {})).status, 401);
+    assert.equal((await s.req('POST', '/api/admin/bookings/NOPE/email', {}, { cookie })).status, 404);
   });
 });
 

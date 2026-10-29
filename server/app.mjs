@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { createAuth, createLimiter, checkPasscodeStrength } from './auth.mjs';
 import { openStore, seedStylists } from './store.mjs';
 import { createNotifier, formatOrder, formatBooking } from './notify.mjs';
+import { createMailer, buildBookingEmail } from './mailer.mjs';
 import {
   HttpError,
   BOOKING_STATUSES,
@@ -52,7 +53,7 @@ const MIME = {
 const round2 = (n) => Math.round(n * 100) / 100;
 const newId = (prefix) => `${prefix}-${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
 
-export async function createApp(config) {
+export async function createApp(config, deps = {}) {
   const say = (...args) => {
     if (!config.silent) console.log(...args);
   };
@@ -66,6 +67,7 @@ export async function createApp(config) {
     log: say
   });
   const notifier = createNotifier(config, log);
+  const mailer = deps.mailer || createMailer(config, log);
   const uploadsDir = path.join(config.dataDir, 'uploads');
   const distDir = path.resolve(config.distDir);
 
@@ -395,6 +397,33 @@ export async function createApp(config) {
     });
   }
 
+  /**
+   * Emails the customer that the booking is confirmed and records the outcome on the booking.
+   * Returns 'sent' | 'failed' | 'disabled' | 'no_address'; never throws, so Accept always succeeds.
+   */
+  async function sendConfirmation(id) {
+    const booking = store.state.bookings.find((b) => b.id === id);
+    if (!booking.email) return 'no_address';
+    if (!mailer.enabled) return 'disabled';
+    let error = '';
+    try {
+      const { subject, text } = buildBookingEmail(booking, config);
+      await mailer.send({ to: booking.email, subject, text });
+    } catch (err) {
+      error = String(err.message || 'Неуспешно изпращане.').slice(0, 200);
+    }
+    await store.transaction((state) => {
+      const b = state.bookings.find((x) => x.id === id);
+      if (!b) return;
+      if (error) b.emailError = error;
+      else {
+        b.emailSentAt = new Date().toISOString();
+        delete b.emailError;
+      }
+    });
+    return error ? 'failed' : 'sent';
+  }
+
   async function handleAdmin(req, res, pathname) {
     const method = req.method;
     let m;
@@ -408,7 +437,8 @@ export async function createApp(config) {
       const { orders, bookings } = store.state;
       return send(res, 200, {
         orders: [...orders].reverse().slice(0, 1000),
-        bookings: [...bookings].reverse().slice(0, 1000)
+        bookings: [...bookings].reverse().slice(0, 1000),
+        emailEnabled: mailer.enabled
       });
     }
 
@@ -449,19 +479,33 @@ export async function createApp(config) {
       }
     }
 
+    if ((m = /^\/api\/admin\/bookings\/([^/]+)\/email$/.exec(pathname)) && method === 'POST') {
+      const id = decodeId(m[1]);
+      const found = store.state.bookings.find((b) => b.id === id);
+      if (!found) throw new HttpError(404, 'not_found', 'Резервацията не е намерена.');
+      if (found.status !== 'confirmed') {
+        throw new HttpError(409, 'not_confirmed', 'Имейл се изпраща само за потвърдена резервация.');
+      }
+      const email = await sendConfirmation(id);
+      return send(res, 200, { booking: store.state.bookings.find((b) => b.id === id), email });
+    }
+
     if ((m = /^\/api\/admin\/bookings\/([^/]+)$/.exec(pathname))) {
       const id = decodeId(m[1]);
       if (method === 'PATCH') {
         const body = await readJson(req, 2048);
         if (!BOOKING_STATUSES.includes(body.status)) throw new HttpError(400, 'invalid_input', 'Невалиден статус.');
-        const booking = await store.transaction((state) => {
+        const confirmedNow = await store.transaction((state) => {
           const found = state.bookings.find((b) => b.id === id);
           if (!found) throw new HttpError(404, 'not_found', 'Резервацията не е намерена.');
+          const was = found.status;
           found.status = body.status;
           found.updatedAt = new Date().toISOString();
-          return found;
+          return was !== 'confirmed' && body.status === 'confirmed';
         });
-        return send(res, 200, { booking });
+        // Only a change to "confirmed" sends mail; repeating the same status never does.
+        const email = confirmedNow ? await sendConfirmation(id) : null;
+        return send(res, 200, { booking: store.state.bookings.find((b) => b.id === id), email });
       }
       if (method === 'DELETE') {
         await store.transaction((state) => {
