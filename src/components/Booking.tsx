@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { STYLISTS, PRICE_LIST } from '../data/salonData';
-import { BookingFormState, PriceItem } from '../types';
+import { PRICE_LIST } from '../data/salonData';
+import { BookingFormState, PriceItem, Stylist } from '../types';
 import * as api from '../api';
 
 interface BookingProps {
   selectedServicePreload?: string;
   onClearPreload?: () => void;
   priceList?: PriceItem[];
+  stylists?: Stylist[];
 }
 
 export const Booking: React.FC<BookingProps> = ({
   selectedServicePreload,
   onClearPreload,
-  priceList = PRICE_LIST
+  priceList = PRICE_LIST,
+  stylists = []
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -23,6 +25,7 @@ export const Booking: React.FC<BookingProps> = ({
     time: '11:00',
     name: '',
     phone: '',
+    email: '',
     notes: '',
     agreedToTerms: false
   });
@@ -35,10 +38,18 @@ export const Booking: React.FC<BookingProps> = ({
     stylistName: string;
     name: string;
     phone: string;
+    email: string;
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The owner can remove a stylist while a customer has the page open.
+  useEffect(() => {
+    if (form.stylist !== 'any' && stylists.length > 0 && !stylists.some((s) => s.id === form.stylist)) {
+      setForm((prev) => ({ ...prev, stylist: 'any' }));
+    }
+  }, [stylists, form.stylist]);
 
   useEffect(() => {
     if (selectedServicePreload) {
@@ -48,7 +59,7 @@ export const Booking: React.FC<BookingProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.service || !form.name || !form.phone || !form.agreedToTerms || loading) {
+    if (!form.service || !form.name || !form.phone || !form.email || !form.agreedToTerms || loading) {
       return;
     }
 
@@ -63,6 +74,7 @@ export const Booking: React.FC<BookingProps> = ({
         time: form.time,
         name: form.name,
         phone: form.phone,
+        email: form.email,
         notes: form.notes,
         agreedToTerms: form.agreedToTerms
       });
@@ -73,7 +85,8 @@ export const Booking: React.FC<BookingProps> = ({
         service: booking.service,
         stylistName: booking.stylistName,
         name: booking.name,
-        phone: booking.phone
+        phone: booking.phone,
+        email: booking.email
       });
       if (onClearPreload) onClearPreload();
     } catch (err) {
@@ -97,6 +110,7 @@ export const Booking: React.FC<BookingProps> = ({
       time: '11:00',
       name: '',
       phone: '',
+      email: '',
       notes: '',
       agreedToTerms: false
     });
@@ -160,6 +174,10 @@ export const Booking: React.FC<BookingProps> = ({
                   <span className="text-gray-400">Телефон за контакт:</span>
                   <span className="text-white font-medium tabular-nums">{submittedData.phone}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Имейл:</span>
+                  <span className="text-white font-medium break-all text-right">{submittedData.email}</span>
+                </div>
                 <div className="flex justify-between pt-2 border-t border-[#D4AF37]/15 text-[11px] text-gray-400">
                   <span>Адрес на салона:</span>
                   <span className="text-gray-300">Варна, бул. „Княз Борис I“ 48</span>
@@ -167,7 +185,7 @@ export const Booking: React.FC<BookingProps> = ({
               </div>
 
               <p className="text-xs text-gray-400 max-w-md mx-auto font-light leading-relaxed">
-                Записахме часа Ви в системата на VIP Beauty House. Ще получите SMS и обаждане за потвърждение.
+                Записахме часа Ви в системата на VIP Beauty House. Ще Ви се обадим за потвърждение, а след това ще получите потвърждение и на имейла си.
               </p>
 
               <button
@@ -204,35 +222,29 @@ export const Booking: React.FC<BookingProps> = ({
 
               {/* 2. Избор на специалист */}
               <div>
-                <label className="block font-cinzel text-sm font-bold text-[#E6CA65] mb-3 uppercase tracking-wider">
-                  2. Изберете стилист (опционално)
+                <label htmlFor="book-stylist-input" className="block font-cinzel text-sm font-bold text-[#E6CA65] mb-3 uppercase tracking-wider">
+                  2. Изберете стилист
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  {STYLISTS.map((s) => (
-                    <label
-                      key={s.id}
-                      className={`flex items-start space-x-3 p-3.5 rounded-lg border cursor-pointer transition ${
-                        form.stylist === s.id
-                          ? 'bg-[#181818] border-[#D4AF37]'
-                          : 'bg-[#141414] border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="stylist"
-                        value={s.id}
-                        checked={form.stylist === s.id}
-                        onChange={(e) => setForm({ ...form, stylist: e.target.value })}
-                        className="accent-[#D4AF37] mt-0.5"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-white font-medium text-xs sm:text-sm">{s.name}</span>
-                        <span className="text-[11px] text-[#E6CA65]">{s.role}</span>
-                        <span className="text-[10px] text-gray-400">{s.experience}</span>
-                      </div>
-                    </label>
+                <select
+                  id="book-stylist-input"
+                  name="stylist"
+                  value={form.stylist}
+                  onChange={(e) => setForm({ ...form, stylist: e.target.value })}
+                  className="w-full bg-[#161616] border border-[#D4AF37]/30 rounded-lg py-3 px-4 text-white text-sm focus:border-[#D4AF37] focus:outline-none transition"
+                >
+                  <option value="any">Първи свободен стилист</option>
+                  {stylists.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.role ? ` — ${s.role}` : ''}
+                    </option>
                   ))}
-                </div>
+                </select>
+                {(() => {
+                  const chosen = stylists.find((s) => s.id === form.stylist);
+                  return chosen && chosen.experience ? (
+                    <p className="mt-2 text-[11px] text-gray-400">{chosen.experience}</p>
+                  ) : null;
+                })()}
               </div>
 
               {/* 3. Дата и час */}
@@ -289,6 +301,16 @@ export const Booking: React.FC<BookingProps> = ({
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     className="w-full bg-[#161616] border border-[#D4AF37]/30 rounded-lg py-3 px-4 text-white text-sm focus:border-[#D4AF37] focus:outline-none placeholder-gray-500 transition"
+                  />
+                  <input
+                    type="email"
+                    required
+                    maxLength={120}
+                    autoComplete="email"
+                    placeholder="Имейл за потвърждение на часа *"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className="w-full sm:col-span-2 bg-[#161616] border border-[#D4AF37]/30 rounded-lg py-3 px-4 text-white text-sm focus:border-[#D4AF37] focus:outline-none placeholder-gray-500 transition"
                   />
                 </div>
                 <textarea

@@ -49,6 +49,7 @@ export interface BookingFormState {
   time: string;
   name: string;
   phone: string;
+  email: string;
   notes: string;
   agreedToTerms: boolean;
 }
@@ -59,6 +60,7 @@ export interface Catalog {
   products: Product[];
   priceList: PriceItem[];
   salonServices: SalonService[];
+  stylists: Stylist[];
 }
 
 export type OrderStatus = 'new' | 'confirmed' | 'shipped' | 'completed' | 'cancelled';
@@ -97,5 +99,11 @@ export interface BookingRecord {
   time: string;
   name: string;
   phone: string;
+  email?: string;
   notes: string;
+  emailSentAt?: string;
+  emailError?: string;
 }
+
+/** Outcome of the confirmation email after Accept (null = nothing was sent). */
+export type EmailResult = 'sent' | 'failed' | 'disabled' | 'no_address' | null;

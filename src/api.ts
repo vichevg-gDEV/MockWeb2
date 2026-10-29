@@ -1,4 +1,4 @@
-import type { BookingRecord, BookingStatus, Catalog, OrderRecord, OrderStatus, Product } from './types';
+import type { BookingRecord, BookingStatus, Catalog, EmailResult, OrderRecord, OrderStatus, Product } from './types';
 
 /**
  * Talks to the VIP Beauty House server (server/server.mjs).
@@ -95,6 +95,7 @@ export interface BookingPayload {
   time: string;
   name: string;
   phone: string;
+  email: string;
   notes: string;
   agreedToTerms: boolean;
 }
@@ -109,6 +110,7 @@ export const createBooking = (payload: BookingPayload) =>
       stylistName: string;
       name: string;
       phone: string;
+      email: string;
     };
   }>('POST', '/bookings', payload);
 
@@ -123,13 +125,15 @@ export const adminChangePin = (currentPin: string, newPin: string) =>
   request<{ ok: boolean }>('POST', '/admin/pin', { currentPin, newPin });
 
 export const adminInbox = () =>
-  request<{ orders: OrderRecord[]; bookings: BookingRecord[] }>('GET', '/admin/inbox');
+  request<{ orders: OrderRecord[]; bookings: BookingRecord[]; emailEnabled: boolean }>('GET', '/admin/inbox');
 export const adminSetOrderStatus = (id: string, status: OrderStatus) =>
   request<{ order: OrderRecord } & CatalogResult>('PATCH', `/admin/orders/${encodeURIComponent(id)}`, { status });
 export const adminDeleteOrder = (id: string) =>
   request<{ ok: boolean }>('DELETE', `/admin/orders/${encodeURIComponent(id)}`);
 export const adminSetBookingStatus = (id: string, status: BookingStatus) =>
-  request<{ booking: BookingRecord }>('PATCH', `/admin/bookings/${encodeURIComponent(id)}`, { status });
+  request<{ booking: BookingRecord; email: EmailResult }>('PATCH', `/admin/bookings/${encodeURIComponent(id)}`, { status });
+export const adminResendBookingEmail = (id: string) =>
+  request<{ booking: BookingRecord; email: EmailResult }>('POST', `/admin/bookings/${encodeURIComponent(id)}/email`, {});
 export const adminDeleteBooking = (id: string) =>
   request<{ ok: boolean }>('DELETE', `/admin/bookings/${encodeURIComponent(id)}`);
 
@@ -141,6 +145,7 @@ export const adminDeleteProduct = (id: string) =>
 export const adminSetStock = (id: string, stock: number) =>
   request<CatalogResult>('PATCH', `/admin/products/${encodeURIComponent(id)}/stock`, { stock });
 export const adminSavePriceList = (items: unknown[]) => request<CatalogResult>('PUT', '/admin/pricelist', { items });
+export const adminSaveStylists = (items: unknown[]) => request<CatalogResult>('PUT', '/admin/stylists', { items });
 export const adminSaveServices = (items: unknown[]) => request<CatalogResult>('PUT', '/admin/services', { items });
 export const adminImportCatalog = (data: Partial<Catalog>) =>
   request<CatalogResult>('POST', '/admin/catalog/import', data);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Product, CartItem, PriceItem, SalonService, Catalog } from './types';
-import { PRODUCTS, PRICE_LIST, SALON_SERVICES } from './data/salonData';
+import { Product, CartItem, PriceItem, SalonService, Stylist, Catalog } from './types';
+import { PRODUCTS, PRICE_LIST, SALON_SERVICES, STYLISTS } from './data/salonData';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
@@ -34,6 +34,8 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(PRODUCTS);
   const [priceList, setPriceList] = useState<PriceItem[]>(PRICE_LIST);
   const [salonServices, setSalonServices] = useState<SalonService[]>(SALON_SERVICES);
+  // Until the server answers, show the default team (the virtual "any" option is added by the form).
+  const [stylists, setStylists] = useState<Stylist[]>(STYLISTS.filter((s) => s.id !== 'any'));
 
   // CART AND CHECKOUT STATE
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -49,6 +51,7 @@ export default function App() {
     setProducts(catalog.products);
     setPriceList(catalog.priceList);
     setSalonServices(catalog.salonServices);
+    setStylists(catalog.stylists || []);
 
     // Keep the cart in line with what is really on the shelf (stock, price, removed items).
     setCartItems((prev) =>
@@ -316,6 +319,7 @@ export default function App() {
         {/* Online Booking */}
         <Booking
           priceList={priceList}
+          stylists={stylists}
           selectedServicePreload={selectedServicePreload}
           onClearPreload={() => setSelectedServicePreload('')}
         />
