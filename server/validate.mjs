@@ -28,6 +28,8 @@ function str(value, field, { min = 0, max = 200, required = false } = {}) {
 }
 
 const PHONE_RE = /^\+?[\d\s()\-./]{6,30}$/;
+// Stricter than EMAIL_RE: this address ends up in mail headers, so no quotes, brackets or commas.
+const BOOKING_EMAIL_RE = /^[A-Za-z0-9._%+'-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 // ---------------------------------------------------------------- customer input
@@ -75,9 +77,11 @@ export function parseBookingInput(body, stylists, config) {
     time: str(body.time, 'час', { required: true, max: 5 }),
     name: str(body.name, 'име', { required: true, min: 2, max: 100 }),
     phone: str(body.phone, 'телефон', { required: true, max: 30 }),
+    email: str(body.email, 'имейл', { required: true, max: 120 }),
     notes: str(body.notes, 'забележка', { max: 500 })
   };
   if (!PHONE_RE.test(booking.phone)) throw bad('Невалиден телефонен номер.');
+  if (!BOOKING_EMAIL_RE.test(booking.email)) throw bad('Невалиден имейл адрес.');
   const stylist = stylists.find((s) => s.id === booking.stylistId);
   if (!stylist) throw bad('Непознат стилист.');
   booking.stylistName = stylist.name;

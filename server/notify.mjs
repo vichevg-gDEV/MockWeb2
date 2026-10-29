@@ -89,6 +89,7 @@ export function formatBooking(booking) {
     `Кога: ${booking.date} в ${booking.time}`,
     `Клиент: ${booking.name}`,
     `Телефон: ${booking.phone}`,
+    booking.email ? `Имейл: ${booking.email}` : null,
     booking.notes ? `\nБележка: ${booking.notes}` : null
   ]
     .filter((l) => l !== null)

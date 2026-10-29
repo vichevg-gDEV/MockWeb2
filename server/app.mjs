@@ -304,7 +304,11 @@ export async function createApp(config) {
 
   async function createBooking(req, res) {
     limitPublic(req);
-    const input = parseBookingInput(await readJson(req, 16 * 1024), seed.stylists, config);
+    const input = parseBookingInput(
+      await readJson(req, 16 * 1024),
+      [seed.stylists.find((x) => x.id === 'any'), ...store.state.catalog.stylists],
+      config
+    );
 
     const booking = await store.transaction((state) => {
       if (input.stylistId !== 'any') {
@@ -335,6 +339,7 @@ export async function createApp(config) {
         time: input.time,
         name: input.name,
         phone: input.phone,
+        email: input.email,
         notes: input.notes
       };
       state.bookings.push(created);
@@ -349,7 +354,8 @@ export async function createApp(config) {
         service: booking.service,
         stylistName: booking.stylistName,
         name: booking.name,
-        phone: booking.phone
+        phone: booking.phone,
+        email: booking.email
       }
     });
     log(`Booking ${booking.id} created`);

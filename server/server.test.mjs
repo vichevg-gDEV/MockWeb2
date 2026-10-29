@@ -80,6 +80,7 @@ const booking = (extra = {}) => ({
   time: '11:00',
   name: 'Мила Иванова',
   phone: '0888 765 432',
+  email: 'mila@example.com',
   notes: '',
   agreedToTerms: true,
   ...extra
@@ -258,6 +259,37 @@ describe('stylists', () => {
     const imported = await s.req('POST', '/api/admin/catalog/import', { stylists: exported.stylists }, { cookie });
     assert.equal(imported.status, 200);
     assert.equal((await s.req('GET', '/api/catalog')).json.stylists.length, 1);
+  });
+});
+
+describe('booking email and stylists', () => {
+  test('email is required, validated, stored and shown in the inbox', async () => {
+    const s = await startApp();
+    const post = (email) => s.req('POST', '/api/bookings', booking({ email, stylist: 'any' }));
+    assert.equal((await post(undefined)).status, 400);
+    assert.equal((await post('')).status, 400);
+    for (const bad of ['not-an-email', 'a@b', 'a b@example.com', 'x@example.com\r\nBcc: evil@example.com', 'a<b>@example.com', 'a,b@example.com', `${'x'.repeat(115)}@e.com`]) {
+      assert.equal((await post(bad)).status, 400, `rejects ${JSON.stringify(bad)}`);
+    }
+    assert.equal((await post('Mila@Example.com')).status, 201);
+    const { cookie } = await s.login();
+    const inbox = (await s.req('GET', '/api/admin/inbox', undefined, { cookie })).json;
+    assert.equal(inbox.bookings[0].email, 'Mila@Example.com');
+  });
+
+  test('a stylist added by the admin can be booked; a removed one cannot', async () => {
+    const s = await startApp();
+    const { cookie } = await s.login();
+    const put = await s.req('PUT', '/api/admin/stylists', { items: [{ name: 'Нина Колева', role: '', experience: '' }] }, { cookie });
+    const id = put.json.catalog.stylists[0].id;
+    const ok = await s.req('POST', '/api/bookings', booking({ stylist: id }));
+    assert.equal(ok.status, 201);
+    assert.equal(ok.json.booking.stylistName, 'Нина Колева');
+    assert.equal((await s.req('POST', '/api/bookings', booking({ stylist: 'silvia', time: '12:00' }))).status, 400);
+    await s.req('PUT', '/api/admin/stylists', { items: [] }, { cookie });
+    assert.equal((await s.req('POST', '/api/bookings', booking({ stylist: id, time: '13:00' }))).status, 400);
+    const inbox = (await s.req('GET', '/api/admin/inbox', undefined, { cookie })).json;
+    assert.equal(inbox.bookings[0].stylistName, 'Нина Колева', 'old booking keeps the stylist name');
   });
 });
 
