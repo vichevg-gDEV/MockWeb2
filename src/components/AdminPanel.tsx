@@ -8,9 +8,11 @@ import {
   OrderRecord,
   BookingRecord,
   OrderStatus,
-  BookingStatus
+  BookingStatus,
+  EmailResult
 } from '../types';
 import * as api from '../api';
+import { BookingCalendar, BookingActions } from './BookingCalendar';
 import { compressImageFile, PRESET_PRODUCT_IMAGES } from '../utils/imageCompressor';
 import { getAssetUrl, handleImageError } from '../utils/assetPath';
 
@@ -124,6 +126,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [orderFilter, setOrderFilter] = useState<'open' | 'all' | OrderStatus>('open');
   const [bookingFilter, setBookingFilter] = useState<'open' | 'all' | BookingStatus>('open');
+  const [bookingView, setBookingView] = useState<'list' | 'calendar'>('list');
+  // Whether the server has SMTP settings; without them accepting a booking sends no email.
+  const [emailEnabled, setEmailEnabled] = useState(false);
 
   // Inventory Filters & Search
   const [productSearch, setProductSearch] = useState('');
@@ -222,6 +227,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const inbox = await api.adminInbox();
       setOrders(inbox.orders);
       setBookings(inbox.bookings);
+      setEmailEnabled(inbox.emailEnabled);
     } catch (err) {
       if (err instanceof api.ApiError && err.status === 401) {
         window.dispatchEvent(new Event('vip-admin-unauthorized'));
@@ -325,15 +331,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  // Tells the owner what happened with the confirmation email (a failure never undoes the booking).
+  const emailToast = (booking: BookingRecord, email: EmailResult) => {
+    if (email === 'sent') showToast(`Резервацията е потвърдена. Имейл е изпратен до ${booking.email}.`);
+    else if (email === 'failed')
+      showToast(`Резервацията е потвърдена, но имейлът не е изпратен: ${booking.emailError || 'неизвестна грешка'}`);
+    else if (email === 'disabled') showToast('Резервацията е потвърдена. Имейлите са изключени (липсват SMTP настройки).');
+    else if (email === 'no_address') showToast('Резервацията е потвърдена. Клиентът няма имейл адрес.');
+    else showToast('Резервацията е обновена.');
+  };
+
   const handleBookingStatus = async (booking: BookingRecord, status: BookingStatus) => {
     if (status === booking.status) return;
     try {
       const result = await api.adminSetBookingStatus(booking.id, status);
       setBookings((prev) => prev.map((b) => (b.id === booking.id ? result.booking : b)));
+      if (status === 'confirmed') emailToast(result.booking, result.email);
     } catch (err) {
       handleAdminError(err);
       loadInbox();
     }
+  };
+
+  // Decline (or cancel an accepted booking): frees the slot, sends no email.
+  const handleDeclineBooking = (booking: BookingRecord) => {
+    const what = booking.status === 'confirmed' ? 'Да отменя ли потвърдената резервация' : 'Да откажа ли заявката';
+    if (!confirm(`${what} на ${booking.name} за ${booking.date} в ${booking.time} ч.? Часът ще бъде освободен.`)) return;
+    handleBookingStatus(booking, 'cancelled');
+  };
+
+  const handleResendEmail = async (booking: BookingRecord) => {
+    try {
+      const result = await api.adminResendBookingEmail(booking.id);
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? result.booking : b)));
+      if (result.email === 'sent') showToast(`Имейлът е изпратен до ${result.booking.email}.`);
+      else if (result.email === 'failed')
+        showToast(`Имейлът не е изпратен: ${result.booking.emailError || 'неизвестна грешка'}`);
+      else if (result.email === 'disabled') showToast('Имейлите са изключени (липсват SMTP настройки).');
+      else showToast('Няма имейл адрес за тази резервация.');
+    } catch (err) {
+      handleAdminError(err);
+      loadInbox();
+    }
+  };
+
+  const bookingHandlers = {
+    onAccept: (b: BookingRecord) => handleBookingStatus(b, 'confirmed'),
+    onDecline: handleDeclineBooking,
+    onStatus: handleBookingStatus,
+    onResend: handleResendEmail,
+    emailEnabled
   };
 
   const handleDeleteBooking = async (booking: BookingRecord) => {
@@ -737,7 +784,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="submit"
                 disabled={isLoggingIn || !pinInput}
-                className="w-full gold-btn py-3 rounded-xl font-cinzel font-bold text-xs uppercase tracking-widest text-black shadow-lg disabled:opacity-60"
+                className="w-full gold-btn-gradient py-3 rounded-xl font-cinzel font-bold text-xs uppercase tracking-widest text-black shadow-lg disabled:opacity-60"
               >
                 {isLoggingIn ? 'Проверка...' : 'Влез в Панела'}
               </button>
@@ -1026,10 +1073,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <h2 className="font-cinzel text-xl font-bold text-white">Резервации за часове</h2>
                     <p className="text-xs text-gray-400 font-light">
-                      Свържете се с клиента, за да потвърдите часа, после сменете статуса на „Потвърдена“.
+                      Свържете се с клиента, за да потвърдите часа, после натиснете „Приеми“. Клиентът получава имейл с
+                      потвърждение.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg border border-neutral-700 overflow-hidden text-xs">
+                      {(['list', 'calendar'] as const).map((view) => (
+                        <button
+                          key={view}
+                          type="button"
+                          onClick={() => setBookingView(view)}
+                          className={`px-3 py-2 cursor-pointer ${
+                            bookingView === view
+                              ? 'bg-[#D4AF37] text-black font-semibold'
+                              : 'bg-[#181818] text-gray-300 hover:text-white'
+                          }`}
+                        >
+                          {view === 'list' ? 'Списък' : 'Календар'}
+                        </button>
+                      ))}
+                    </div>
+                    {bookingView === 'list' && (
                     <select
                       value={bookingFilter}
                       onChange={(e) => setBookingFilter(e.target.value as 'open' | 'all' | BookingStatus)}
@@ -1043,6 +1108,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </option>
                       ))}
                     </select>
+                    )}
                     <button
                       type="button"
                       onClick={loadInbox}
@@ -1053,7 +1119,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {filteredBookings.length === 0 ? (
+                {!emailEnabled && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
+                    <i className="fa-solid fa-triangle-exclamation mr-2"></i>
+                    Имейлите за потвърждение са изключени. Добавете SMTP настройките във файла .env на сървъра и
+                    рестартирайте (виж README).
+                  </div>
+                )}
+
+                {bookingView === 'calendar' ? (
+                  <BookingCalendar bookings={bookings} {...bookingHandlers} />
+                ) : filteredBookings.length === 0 ? (
                   <div className="bg-[#121212] border border-neutral-800 rounded-xl p-10 text-center text-sm text-gray-400">
                     Няма резервации в този изглед.
                   </div>
@@ -1083,8 +1159,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <a href={`tel:${booking.phone}`} className="text-white underline">
                               {booking.phone}
                             </a>
+                            {booking.email && <span className="text-gray-400"> · {booking.email}</span>}
                           </div>
                           {booking.notes && <div className="text-gray-400 italic">„{booking.notes}“</div>}
+                          <div className="pt-2">
+                            <BookingActions booking={booking} handlers={bookingHandlers} />
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -1229,7 +1309,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {/* Primary Add Product Button */}
                   <button
                     onClick={handleOpenAddProduct}
-                    className="gold-btn px-4 py-2.5 rounded-lg text-xs font-cinzel font-bold text-black flex items-center justify-center gap-2 shadow-lg shrink-0 cursor-pointer"
+                    className="gold-btn-gradient px-4 py-2.5 rounded-lg text-xs font-cinzel font-bold text-black flex items-center justify-center gap-2 shadow-lg shrink-0 cursor-pointer"
                   >
                     <i className="fa-solid fa-plus"></i>
                     <span>+ Нов Продукт & Снимка</span>
@@ -1417,7 +1497,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     <button
                       onClick={handleOpenAddPriceItem}
-                      className="gold-btn px-3.5 py-2 rounded-lg text-xs font-cinzel font-bold text-black flex items-center gap-1.5 shadow shrink-0 self-start sm:self-auto cursor-pointer"
+                      className="gold-btn-gradient px-3.5 py-2 rounded-lg text-xs font-cinzel font-bold text-black flex items-center gap-1.5 shadow shrink-0 self-start sm:self-auto cursor-pointer"
                     >
                       <i className="fa-solid fa-plus"></i>
                       <span>+ Добави Услуга в Ценоразписа</span>
@@ -1715,7 +1795,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="button"
                     onClick={handleChangePin}
                     disabled={isChangingPin || !currentPinInput || !newPinInput}
-                    className="gold-btn px-4 py-2 rounded-lg text-xs font-semibold text-black disabled:opacity-60"
+                    className="gold-btn-gradient px-4 py-2 rounded-lg text-xs font-semibold text-black disabled:opacity-60"
                   >
                     {isChangingPin ? 'Запазване...' : 'Запази нов код'}
                   </button>
@@ -1867,7 +1947,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="gold-btn px-3 py-2 rounded-lg text-xs font-medium text-black flex items-center gap-1.5 cursor-pointer"
+                        className="gold-btn-gradient px-3 py-2 rounded-lg text-xs font-medium text-black flex items-center gap-1.5 cursor-pointer"
                       >
                         <i className="fa-solid fa-upload"></i>
                         <span>Качи снимка от компютър</span>
@@ -2098,7 +2178,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="gold-btn px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black shadow-lg"
+                  className="gold-btn-gradient px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black shadow-lg"
                 >
                   {editingProductId ? 'Запази Промените' : 'Добави в Каталога'}
                 </button>
@@ -2200,7 +2280,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="gold-btn px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black"
+                  className="gold-btn-gradient px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black"
                 >
                   {editingPriceIndex !== null ? 'Обнови Услугата' : 'Запази в Ценоразписа'}
                 </button>
@@ -2300,7 +2380,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="gold-btn px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black"
+                  className="gold-btn-gradient px-5 py-2 rounded-lg text-xs font-cinzel font-bold text-black"
                 >
                   Запази
                 </button>
