@@ -54,6 +54,17 @@ export function loadConfig(env = process.env, overrides = {}) {
     telegramToken: env.TELEGRAM_BOT_TOKEN || '',
     telegramChatId: env.TELEGRAM_CHAT_ID || '',
     webhookUrl: env.NOTIFY_WEBHOOK_URL || '',
+    // Booking confirmation emails. Without host, user and password they are switched off.
+    smtp: {
+      host: env.SMTP_HOST || '',
+      port: num(env.SMTP_PORT, 587),
+      user: env.SMTP_USER || '',
+      pass: env.SMTP_PASS || '',
+      from: env.SMTP_FROM || '',
+      secure: num(env.SMTP_PORT, 587) === 465
+    },
+    salonAddress: env.SALON_ADDRESS ?? 'бул. „Княз Борис I“ 48, Варна',
+    salonPhone: env.SALON_PHONE ?? '+359 88 888 9999',
     shippingFee: num(env.SHIPPING_FEE, 7),
     freeShippingOver: num(env.FREE_SHIPPING_OVER, 150),
     timezone: env.SALON_TIMEZONE || 'Europe/Sofia',
