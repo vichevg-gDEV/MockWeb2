@@ -3,6 +3,7 @@ import {
   Product,
   PriceItem,
   SalonService,
+  Stylist,
   Catalog,
   OrderRecord,
   BookingRecord,
@@ -50,6 +51,9 @@ const formatDateTime = (iso: string) => {
 
 const INBOX_REFRESH_MS = 30_000;
 
+// A stylist row being edited in the Team tab (_k keeps inputs stable while rows are added or removed).
+type TeamRow = Stylist & { _k: string };
+
 interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -64,6 +68,7 @@ interface AdminPanelProps {
   onUpdatePriceItem: (index: number, updatedItem: PriceItem) => Promise<boolean>;
   onDeletePriceItem: (index: number) => Promise<boolean>;
   salonServices: SalonService[];
+  stylists: Stylist[];
   onUpdateSalonService: (id: string, updated: Partial<SalonService>) => Promise<boolean>;
   onAddSalonService: (newService: SalonService) => Promise<boolean>;
   onDeleteSalonService: (id: string) => Promise<boolean>;
@@ -86,6 +91,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdatePriceItem,
   onDeletePriceItem,
   salonServices,
+  stylists,
   onUpdateSalonService,
   onAddSalonService,
   onDeleteSalonService,
@@ -107,7 +113,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isChangingPin, setIsChangingPin] = useState(false);
 
   // Active Admin Tab
-  const [activeTab, setActiveTab] = useState<'orders' | 'bookings' | 'inventory' | 'services' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'bookings' | 'inventory' | 'services' | 'team' | 'settings'>('orders');
+
+  // Team tab: null means "no unsaved edits, show what the server has".
+  const [teamDraft, setTeamDraft] = useState<TeamRow[] | null>(null);
+  const [savingTeam, setSavingTeam] = useState(false);
 
   // Orders & bookings received from customers
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -333,6 +343,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setBookings((prev) => prev.filter((b) => b.id !== booking.id));
     } catch (err) {
       handleAdminError(err);
+    }
+  };
+
+  // Team (stylists)
+  const teamRows: TeamRow[] = teamDraft ?? stylists.map((x) => ({ ...x, _k: x.id }));
+  const editTeam = (next: TeamRow[]) => setTeamDraft(next);
+  const updateTeamRow = (key: string, patch: Partial<Stylist>) =>
+    editTeam(teamRows.map((r) => (r._k === key ? { ...r, ...patch } : r)));
+  const addTeamRow = () =>
+    editTeam([...teamRows, { _k: `new-${Date.now()}-${teamRows.length}`, id: '', name: '', role: '', experience: '' }]);
+  const removeTeamRow = (row: TeamRow) => {
+    const today = new Date().toLocaleDateString('sv-SE');
+    const upcoming = row.id
+      ? bookings.filter(
+          (b) => b.stylistId === row.id && ['new', 'confirmed'].includes(b.status) && b.date >= today
+        ).length
+      : 0;
+    const warning = upcoming
+      ? `${row.name || 'Този стилист'} има ${upcoming} предстоящи резервации. Те остават в календара, но нови не могат да се правят. Премахвате ли го?`
+      : `Да премахна ли ${row.name || 'този ред'} от екипа?`;
+    if (!confirm(warning)) return;
+    editTeam(teamRows.filter((r) => r._k !== row._k));
+  };
+  const handleSaveTeam = async () => {
+    if (!teamDraft || savingTeam) return;
+    setSavingTeam(true);
+    try {
+      const result = await api.adminSaveStylists(teamDraft.map(({ _k, ...rest }) => rest));
+      onCatalogChanged(result.catalog);
+      setTeamDraft(null);
+    } catch (err) {
+      handleAdminError(err);
+    } finally {
+      setSavingTeam(false);
     }
   };
 
@@ -791,6 +835,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <i className="fa-solid fa-scissors text-xs"></i>
                 <span>Услуги & Цени ({priceList.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('team')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === 'team'
+                    ? 'bg-[#D4AF37] text-black font-semibold shadow'
+                    : 'text-gray-300 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <i className="fa-solid fa-users text-xs"></i>
+                <span>Екип ({stylists.length})</span>
               </button>
 
               <button
@@ -1519,7 +1575,101 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
 
             {/* ========================================================= */}
-            {/* TAB 3: SETTINGS & DATA BACKUP */}
+            {/* TAB: TEAM (STYLISTS) */}
+            {/* ========================================================= */}
+            {activeTab === 'team' && (
+              <div className="max-w-4xl space-y-5">
+                <div className="bg-[#121212] border border-neutral-800 rounded-xl p-5 shadow-xl">
+                  <div className="mb-5 border-b border-neutral-800 pb-4">
+                    <h3 className="font-cinzel text-lg font-bold text-white">Екип от стилисти</h3>
+                    <p className="text-xs text-gray-400 mt-1 font-light">
+                      Тези стилисти се показват в падащото меню на формата за резервация. Промените се виждат на сайта
+                      веднага след запазване. „Първи свободен стилист“ винаги е първият избор.
+                    </p>
+                  </div>
+
+                  {teamRows.length === 0 && (
+                    <p className="text-xs text-gray-400 py-4">
+                      Няма добавени стилисти. Клиентите ще могат да избират само „Първи свободен стилист“.
+                    </p>
+                  )}
+
+                  <div className="space-y-3">
+                    {teamRows.map((row, index) => (
+                      <div
+                        key={row._k}
+                        className="grid grid-cols-1 sm:grid-cols-[1.2fr_1.4fr_1.4fr_auto] gap-2 items-center bg-[#171717] border border-neutral-800 rounded-lg p-3"
+                      >
+                        <input
+                          type="text"
+                          maxLength={100}
+                          value={row.name}
+                          onChange={(e) => updateTeamRow(row._k, { name: e.target.value })}
+                          placeholder="Име *"
+                          aria-label={`Име на стилист ${index + 1}`}
+                          className="w-full bg-[#0f0f0f] border border-neutral-700 rounded-lg py-2 px-3 text-white text-xs focus:border-[#D4AF37] focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          maxLength={150}
+                          value={row.role}
+                          onChange={(e) => updateTeamRow(row._k, { role: e.target.value })}
+                          placeholder="Длъжност (напр. Главен колорист)"
+                          aria-label={`Длъжност на стилист ${index + 1}`}
+                          className="w-full bg-[#0f0f0f] border border-neutral-700 rounded-lg py-2 px-3 text-white text-xs focus:border-[#D4AF37] focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          maxLength={150}
+                          value={row.experience}
+                          onChange={(e) => updateTeamRow(row._k, { experience: e.target.value })}
+                          placeholder="Опит (напр. 8+ години)"
+                          aria-label={`Опит на стилист ${index + 1}`}
+                          className="w-full bg-[#0f0f0f] border border-neutral-700 rounded-lg py-2 px-3 text-white text-xs focus:border-[#D4AF37] focus:outline-none"
+                        />
+                        <button
+                          onClick={() => removeTeamRow(row)}
+                          aria-label={`Премахни ${row.name || 'стилист ' + (index + 1)}`}
+                          className="p-2 rounded-lg text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer justify-self-end"
+                        >
+                          <i className="fa-solid fa-trash-can"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 mt-5">
+                    <button
+                      onClick={addTeamRow}
+                      className="px-3.5 py-2 rounded-lg text-xs font-semibold text-[#E6CA65] border border-[#D4AF37]/40 hover:bg-[#D4AF37]/10 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-user-plus"></i>
+                      <span>Добави стилист</span>
+                    </button>
+                    <div className="flex-1"></div>
+                    {teamDraft && (
+                      <button
+                        onClick={() => setTeamDraft(null)}
+                        className="px-3.5 py-2 rounded-lg text-xs text-gray-300 border border-neutral-700 hover:bg-neutral-800 transition cursor-pointer"
+                      >
+                        Отказ
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSaveTeam}
+                      disabled={!teamDraft || savingTeam || teamRows.some((r) => !r.name.trim())}
+                      className="gold-btn-gradient px-4 py-2 rounded-lg text-xs font-cinzel font-bold text-black flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <i className={`fa-solid ${savingTeam ? 'fa-circle-notch fa-spin' : 'fa-check'}`}></i>
+                      <span>{savingTeam ? 'Запазване...' : 'Запази екипа'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* TAB: SETTINGS & DATA BACKUP */}
             {/* ========================================================= */}
             {activeTab === 'settings' && (
               <div className="max-w-3xl space-y-6">

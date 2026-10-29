@@ -369,6 +369,7 @@ export default function App() {
         onUpdatePriceItem={handleUpdatePriceItem}
         onDeletePriceItem={handleDeletePriceItem}
         salonServices={salonServices}
+        stylists={stylists}
         onAddSalonService={handleAddSalonService}
         onUpdateSalonService={handleUpdateSalonService}
         onDeleteSalonService={handleDeleteSalonService}
